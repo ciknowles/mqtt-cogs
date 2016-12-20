@@ -1,9 +1,7 @@
 # mqtt-cogs
-Wordpress mqtt plugin
+Wordpress MQTT plugin
 
 ## Synopsis
-
-Wordpress MQTT plugin.
 
 MqttCogs maintains a persistent (well semi persistent) connection to an Mqtt Broker. When a message arrives on a subscribed topic, it persists it to a custom database table in wordpress.
 
@@ -12,7 +10,9 @@ So that you can ‘see’ the data in your blog it provides a number shortcodes 
 ## Code Example
 
 [ mqttcogs_drawgoogle charttype=”LineChart” ]
+
    [ mqttcogs_data limit=”40″ topics=”mysensors_out/100/1/1/0/0″ ]
+   
 [ /mqttcogs_drawgoogle ]
 
 ## Motivation
