@@ -41,7 +41,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    }
 
     }
- 
+    
+  
     public function deactivate() {
 		wp_clear_scheduled_hook('mqtt_cogs_watchdog');
 		delete_transient( 'doing_mqtt' );
@@ -238,11 +239,14 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$doing_mqtt_transient = get_transient( 'doing_mqtt' );
 
 		if ( empty( $doing_mqtt_transient ) ) {
+				$doing_mqtt_transient = sprintf( '%.22F', microtime( true ) );
+				set_transient( 'doing_mqtt', $doing_mqtt_transient );
+			
 		        register_shutdown_function(array($this, 'shutdownHandler'));
-        		set_error_handler(array($this, 'errorHandler'));
+        		//set_error_handler(array($this, 'errorHandler'));
         		Debug::Enable();
         		
-        		Debug::SetLogPriority(Debug::NOTICE);
+        		Debug::SetLogPriority(Debug::INFO);
         		
         		if ("false" == $this->getOption("MQTT_Recycle", "false")) {
         			$this->addOption("MQTT_Recycle", "295");
@@ -250,9 +254,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         		
         		$recycle_secs = intval($this->getOption("MQTT_Recycle"));
         		
-			$doing_mqtt_transient = sprintf( '%.22F', microtime( true ) );
-			set_transient( 'doing_mqtt', $doing_mqtt_transient,$recycle_secs );
-	
+		
 			
 			$mqtt = new MQTT($this->getOption("MQTT_Server"), $this->getOption("MQTT_ClientID"));
 			
@@ -270,18 +272,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
 			}
 			
-			
-			/*$mqtt = new phpMQTT($this->getOption("MQTT_Server"),
-			$this->getOption("MQTT_Port"),
-			$this->getOption("MQTT_ClientID")); //Change client name to something unique
-			*/
-				
-			//$mqtt->debug = array($this, "write_log");
-		//	$result = $mqtt->connect(true,NULL,$this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
-		
 			$result = $mqtt->connect();
 						
-			
 			if (!($result)) {
 				$this->write_log("MQTT can't connect");
 				delete_transient( 'doing_mqtt' );
@@ -289,9 +281,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			}
 
 			$this->write_log("phpMQTT connected");
-			
-			//$topics[$this->getOption("MQTT_TopicFilter")] = array("qos"=>1, "function"=>array($this, "handleReceivedMessages"));
-			//$mqtt->subscribe($topics,0);
 			
 			$topics[$this->getOption("MQTT_TopicFilter")] = 1;
 			$callback = new MySubscribeCallback($this);
@@ -302,12 +291,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			{
 				$this->mqtt = $mqtt;
 				
-				while($mqtt->loop() && !empty(get_transient( 'doing_mqtt' ))) { /* && (microtime(true)-$gmt_time<$recycle_secs)) {*/
-					set_time_limit(30);
+				while($mqtt->loop() && !empty(get_transient( 'doing_mqtt' )) && (microtime(true)-$gmt_time<$recycle_secs)) {
+					set_time_limit(0);
 				}
-				delete_transient( 'doing_mqtt' );
+				
 				$this->write_log("disconnecting");
 				$mqtt->disconnect();
+				
 			}
 			catch (Exception $e) {
 				$this->write_log($e->getMessage());
@@ -315,7 +305,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			}
 			finally {
 				$this->mqtt = NULL;
-				//delete_transient( 'doing_mqtt' );									
+				delete_transient( 'doing_mqtt' );									
 			}
 		}
 		
@@ -456,6 +446,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    
 	    	//get the data
 	    	 $therows =  $wpdb->get_results( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc desc limit $limit", ARRAY_A );
+	    	 $this->write_log( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc desc limit $limit");
+	    	 
 	  	foreach($therows as $row) {
 	  		$o = new stdClass();
 			$o->c = array();
@@ -505,7 +497,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  $limit = $atts['limit'];
 	  $topics = $atts['topics'];
 	 
-	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$from.'&to='.$to);                               
+	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"]);                               
 	                                 
 	} 
 

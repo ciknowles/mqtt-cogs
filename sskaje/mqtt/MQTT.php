@@ -771,7 +771,9 @@ class MQTT
      */
     public function handle_message()
     {
-        $selected = $this->socket->select($this->keepalive / 2);
+      //  $selected = $this->socket->select($this->keepalive / 2);
+    	$selected = $this->socket->select(1);
+    	 
 
         if ($selected === false) {
             # Error
