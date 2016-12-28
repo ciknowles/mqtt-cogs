@@ -1,7 +1,20 @@
 <?php
+require(__DIR__ . '/./sskaje/autoload.example.php');
 
 include_once('MqttCogs_LifeCycle.php');
-include_once('phpMQTT.php');
+//include_once('phpMQTT.php');
+
+use \sskaje\mqtt\MQTT;
+use \sskaje\mqtt\Debug;
+use \sskaje\mqtt\MessageHandler;
+
+
+
+
+
+//$MQTT_SERVER = 'tcp://test.mosquitto.org:1883/';
+//$MQTT_SERVER = 'tcp://192.168.11.62:1883/';
+
 
 class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
@@ -17,6 +30,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
 
     public function activate() {
+    		
 		$this->write_log("activate");
 		if (! wp_next_scheduled ( 'mqtt_cogs_watchdog' )) {
 			wp_schedule_event(time(), '1min', 'mqtt_cogs_watchdog');
@@ -99,7 +113,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			global $wpdb;
 			$table_name = $this->prefixTableName('data');				
 			$charset_collate = $wpdb->get_charset_collate();
-			$this->write_log($table_name);
+			
 			
 			$sql = "CREATE TABLE $table_name (
 			id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -209,7 +223,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				
 	        $table_name = $this->prefixTableName('data');
 
-		$sql = "DELETE '$table_name' WHERE DATEDIFF(NOW(),utc) > $dur;";
+		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
 		$this->write_log($sql);			
 		$wpdb->query($sql);										
 	}    
@@ -226,57 +240,82 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		if ( empty( $doing_mqtt_transient ) ) {
 		        register_shutdown_function(array($this, 'shutdownHandler'));
         		set_error_handler(array($this, 'errorHandler'));
-        
-		
+        		Debug::Enable();
+        		
+        		Debug::SetLogPriority(Debug::NOTICE);
+        		
+        		if ("false" == $this->getOption("MQTT_Recycle", "false")) {
+        			$this->addOption("MQTT_Recycle", "295");
+        		}
+        		
+        		$recycle_secs = intval($this->getOption("MQTT_Recycle"));
+        		
 			$doing_mqtt_transient = sprintf( '%.22F', microtime( true ) );
-			set_transient( 'doing_mqtt', $doing_mqtt_transient );
+			set_transient( 'doing_mqtt', $doing_mqtt_transient,$recycle_secs );
 	
-			$mqtt = new phpMQTT($this->getOption("MQTT_Server"),
-			$this->getOption("MQTT_Port"),
-			$this->getOption("MQTT_ClientID")); //Change client name to something unique
-				
-			//$mqtt->debug = array($this, "write_log");
-			$result = $mqtt->connect(true,NULL,$this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
 			
-			if ("false" == $this->getOption("MQTT_Recycle", "false")) {
-				$this->addOption("MQTT_Recycle", "295");
+			$mqtt = new MQTT($this->getOption("MQTT_Server"), $this->getOption("MQTT_ClientID"));
+			
+			switch ($this->getOption("MQTT_Server")) {
+				case "3_1_1":
+					$mqtt->setVersion(MQTT::VERSION_3_1_1);
+				default: 
+					$mqtt->setVersion(MQTT::VERSION_3_1 );
 			}
 			
-			$recycle_secs = intval($this->getOption("MQTT_Recycle"));
+			$context = stream_context_create();
+			$mqtt->setSocketContext($context);
+				
+			if ($this->getOption("MQTT_Username")) {
+				$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
+			}
 			
-
+			
+			/*$mqtt = new phpMQTT($this->getOption("MQTT_Server"),
+			$this->getOption("MQTT_Port"),
+			$this->getOption("MQTT_ClientID")); //Change client name to something unique
+			*/
+				
+			//$mqtt->debug = array($this, "write_log");
+		//	$result = $mqtt->connect(true,NULL,$this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
+		
+			$result = $mqtt->connect();
+						
+			
 			if (!($result)) {
-				$this->write_log("phpMQTT can't connect");
+				$this->write_log("MQTT can't connect");
 				delete_transient( 'doing_mqtt' );
 				return;
 			}
 
 			$this->write_log("phpMQTT connected");
 			
-			$topics[$this->getOption("MQTT_TopicFilter")] = array("qos"=>1, "function"=>array($this, "handleReceivedMessages"));
-			$mqtt->subscribe($topics,0);
+			//$topics[$this->getOption("MQTT_TopicFilter")] = array("qos"=>1, "function"=>array($this, "handleReceivedMessages"));
+			//$mqtt->subscribe($topics,0);
 			
+			$topics[$this->getOption("MQTT_TopicFilter")] = 1;
+			$callback = new MySubscribeCallback($this);
+			$mqtt->setHandler($callback);
+			$mqtt->subscribe($topics);
+						
 			try 
 			{
 				$this->mqtt = $mqtt;
-				$this->write_log(microtime(true));
-				$this->write_log($gmt_time);
-				$this->write_log($recycle_secs);
 				
-				while($mqtt->proc() && !empty(get_transient( 'doing_mqtt' )) && (microtime(true)-$gmt_time<$recycle_secs)) {
+				while($mqtt->loop() && !empty(get_transient( 'doing_mqtt' ))) { /* && (microtime(true)-$gmt_time<$recycle_secs)) {*/
 					set_time_limit(30);
-					
 				}
-				$this->write_log("closing");
-				$mqtt->close();
+				delete_transient( 'doing_mqtt' );
+				$this->write_log("disconnecting");
+				$mqtt->disconnect();
 			}
 			catch (Exception $e) {
 				$this->write_log($e->getMessage());
-				$mqtt.close();
+				$mqtt.disconnect();
 			}
 			finally {
 				$this->mqtt = NULL;
-				delete_transient( 'doing_mqtt' );									
+				//delete_transient( 'doing_mqtt' );									
 			}
 		}
 		
@@ -297,6 +336,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     }
 	
 	
+    /*   
+    
 	function handleReceivedMessages($topic, $msg) {
 		global $wpdb;
 		try
@@ -326,7 +367,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			$this->mqtt.close();
 			delete_transient( 'doing_mqtt' );									
 		}
-	}
+	}*/
 	
 	
 	
@@ -415,7 +456,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    
 	    	//get the data
 	    	 $therows =  $wpdb->get_results( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc desc limit $limit", ARRAY_A );
-	  	$this->write_log( $wpdb->prepare("SELECT utc,payload from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc desc limit $limit",NULL));
 	  	foreach($therows as $row) {
 	  		$o = new stdClass();
 			$o->c = array();
@@ -424,7 +464,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  		
 	  		//loop through columns
 	  		for($i = 0; $i < count($topics); ++$i){
-	  			$this->write_log($row['payload']);
+	  			
 	  			if ($i==$index) {
 	  				if (is_numeric($row['payload'])) {
 		  				$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
@@ -509,7 +549,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	
 	$content = strip_tags(do_shortcode($content));
-			$this->write_log($content);
+			
 	$querystring =  str_replace(array("\r", "\n"), '', $content);
 
 
@@ -549,5 +589,60 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		return 	 'google.charts.load("current", {"packages":["corechart","bar","table"]});';
 
 	}
-
 }
+
+
+class MySubscribeCallback extends MessageHandler
+{
+	private $mqttcogs_plugin;
+	
+	public function __construct($theownerobject)
+	{
+		$this->mqttcogs_plugin = $theownerobject;
+		$this->mqttcogs_plugin->write_log('constructed handler');
+	}
+			
+	public function publish($mqtt, sskaje\mqtt\Message\PUBLISH $publish_object)
+	{
+		global $wpdb;
+		try
+		{
+			$this->mqttcogs_plugin->write_log('message received');
+		
+			$this->mqttcogs_plugin->write_log( $publish_object->getTopic());
+			$this->mqttcogs_plugin->write_log( $publish_object->getMessage());
+		
+			$tableName = $this->mqttcogs_plugin->prefixTableName('data');
+		
+			$wpdb->insert(
+					$tableName,
+					array(
+							'utc' => current_time( 'mysql', true ),
+							'topic' => $publish_object->getTopic(),
+							'payload' => $publish_object->getMessage()
+					),
+					array(
+							'%s',
+							'%s',
+							'%s'
+					)
+					);
+		}
+		catch (Exception $e) {
+			$this->mqttcogs_plugin->write_log($e->getMessage());
+			delete_transient( 'doing_mqtt' );
+			$mqtt->disconnect();
+			
+		}
+		
+		/*printf(
+				"\e[32mI got a message\e[0m:(msgid=%d, QoS=%d, dup=%d, topic=%s) \e[32m%s\e[0m\n",
+				$publish_object->getMsgID(),
+				$publish_object->getQoS(),
+				$publish_object->getDup(),
+				$publish_object->getTopic(),
+				$publish_object->getMessage()
+				);*/
+	}
+}
+
