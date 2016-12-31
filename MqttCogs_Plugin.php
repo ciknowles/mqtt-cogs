@@ -2,19 +2,10 @@
 require(__DIR__ . '/./sskaje/autoload.example.php');
 
 include_once('MqttCogs_LifeCycle.php');
-//include_once('phpMQTT.php');
 
 use \sskaje\mqtt\MQTT;
 use \sskaje\mqtt\Debug;
 use \sskaje\mqtt\MessageHandler;
-
-
-
-
-
-//$MQTT_SERVER = 'tcp://test.mosquitto.org:1883/';
-//$MQTT_SERVER = 'tcp://192.168.11.62:1883/';
-
 
 class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
@@ -54,32 +45,48 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
      * @return array of option meta data.
      */
     public function getOptionMetaData() {
-        //  http://plugin.michael-simpson.com/?page_id=31
+		global $wp_roles;
+    	
+		$arr = array('Anyone');
+		foreach ( $wp_roles->get_names() as $value) {
+			$arr[]=  $value;
+		}
+			
+    	$readroles = array_merge(array(__('MQTT Read Role', 'mqttcogs')),  $arr);
+    	//$this->write_log(var_dump($arr));
+    
+    	$writeroles = array('Contributor') +  $arr;
+    	$this->write_log(var_dump($arr));
+    	
+    	$writeroles = array_merge(array(__('MQTT Write Role', 'mqttcogs')), $arr);
+    	
+    	
+        
+        //http://plugin.michael-simpson.com/?page_id=31
         return array(
             //'_version' => array('Installed Version'), // Leave this one commented-out. Uncomment to test upgrades.
-            'MQTT_Server' => array(__('MQTT Server', 'mqttcogs')),
-            'MQTT_Port' => array(__('MQTT Port', 'mqttcogs')),
+            'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs')),
 			'MQTT_ClientID' => array(__('MQTT ClientID', 'mqttcogs')),
 			'MQTT_Username' => array(__('MQTT User', 'mqttcogs')),
 			'MQTT_Password' => array(__('MQTT Password', 'mqttcogs')),
 			
 			'MQTT_TopicFilter' => array(__('MQTT TopicFilter', 'mqttcogs')),
 			
-			'MQTT_KeepArchive' => array(__('Save messages for', 'mqttcogs'),
+			'MQTT_KeepArchive' => array(__('Save MQTT data for', 'mqttcogs'),
 					'Forever', '365 Days', '165 Days', '30 Days', '7 Days', '1 Day'),
                                 
-                        'MQTT_Recycle' => array(__('MQTT Recycle (secs)', 'mqttcogs'))
+            'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs')),
+        		
+        	//get the user roles here...
+        	
+        		
+        	'MQTT_ReadAccessRole' => $readroles,
+        	'MQTT_WriteAccessRole' => $writeroles
 			
-			
-          /*  'MQTT_ClientID' => array(__('Which user role can do something', 'my-awesome-plugin'),
-                                        'Administrator', 'Editor', 'Author', 'Contributor', 'Subscriber', 'Anyone')	*/
         );
     }
 
-//    protected function getOptionValueI18nString($optionValue) {
-//        $i18nValue = parent::getOptionValueI18nString($optionValue);
-//        return $i18nValue;
-//    }
+
     protected function initOptions() {
         $options = $this->getOptionMetaData();
         if (!empty($options)) {
@@ -114,8 +121,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			global $wpdb;
 			$table_name = $this->prefixTableName('data');				
 			$charset_collate = $wpdb->get_charset_collate();
-			
-			
+						
 			$sql = "CREATE TABLE $table_name (
 			id bigint(20) NOT NULL AUTO_INCREMENT,
 			utc  datetime NOT NULL,
@@ -190,7 +196,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	 
 	 add_shortcode('mqttcogs_data', array($this, 'doData'));	
 	 add_shortcode('mqttcogs_ajax_data', array($this, 'ajax_data'));
+	 add_shortcode('mqttcogs_get', array($this, 'doGet'));
 	 
+	 add_shortcode('mqttcogs_set', array($this, 'doSet'));
 
         // Register AJAX hooks
         // http://plugin.michael-simpson.com/?page_id=41
@@ -200,7 +208,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	//	add_action( 'update_option', string $option, mixed $old_value, mixed $value )
 	
 	add_action('wp_ajax_doGetTopN', array(&$this, 'ajaxACTION_doGetTopN'));
+	
 	add_action('wp_ajax_nopriv_doGetTopN', array(&$this, 'ajaxACTION_doGetTopN')); // optional
+	
+	add_action('wp_ajax_doSet', array(&$this, 'ajaxACTION_doSet'));
+	add_action('wp_ajax_nopriv_doSet', array(&$this, 'ajaxACTION_doSet')); // optional
 
    	}
    	   	 
@@ -311,7 +323,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 	}	
 	
-      public function errorHandler($error_level, $error_message, $error_file, $error_line, $error_context)
+    public function errorHandler($error_level, $error_message, $error_file, $error_line, $error_context)
     {
         $error = "lvl: " . $error_level . " | msg:" . $error_message . " | file:" . $error_file . " | ln:" . $error_line;
 
@@ -326,45 +338,73 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     }
 	
 	
-    /*   
+ 
+	
+    /*
+     * Called to set a mqtt value
+     */
+    public function ajaxACTION_doSet() {
     
-	function handleReceivedMessages($topic, $msg) {
-		global $wpdb;
-		try
-		{
-				
-				$this->write_log($topic);
-				$this->write_log($msg);
-				
-			        $tableName = $this->prefixTableName('data');
-										
-				$wpdb->insert( 
-					$tableName, 
-					array( 
-						'utc' => current_time( 'mysql', true ), 
-						'topic' => $topic,
-						'payload' => $msg
-					), 
-					array( 
-						'%s', 
-						'%s', 
-						'%s'
-					) 
-				);
-		}
-		catch (Exception $e) {
-			$this->write_log($e->getMessage());
-			$this->mqtt.close();
-			delete_transient( 'doing_mqtt' );									
-		}
-	}*/
-	
-	
+    	if (!$this->canUserDoRoleOption('MQTT_WriteAccessRole')) {
+    		return '';
+    	}
+    	
+    	global $wpdb;
+    	
+    	$topic = $_GET['topic'];
+    	$qos = (int) $_GET['qos'];
+    	$payload = $_GET['payload'];
+    	$retain = (int) $_GET['retained'];
+    	$id =  $_GET['id'];
+    	
+    	//we now connect to the broker
+    	$mqtt = new MQTT($this->getOption("MQTT_Server"), $atts['id']);
+    		
+    	switch ($this->getOption("MQTT_Server")) {
+    		case "3_1_1":
+    			$mqtt->setVersion(MQTT::VERSION_3_1_1);
+    		default:
+    			$mqtt->setVersion(MQTT::VERSION_3_1 );
+    	}
+    		
+    	$context = stream_context_create();
+    	$mqtt->setSocketContext($context);
+    	
+    	if ($this->getOption("MQTT_Username")) {
+    		$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
+    	}
+    		
+    	$result = $mqtt->connect();
+    	
+    	if (!($result)) {
+    		$this->write_log("doSet: MQTT can't connect");
+    		echo 'FAIL';
+    	}
+    	
+    	$this->write_log("doSet: MQTT connected");
+    	
+    	// Don't let IE cache this request
+    	header("Pragma: no-cache");
+    	header("Cache-Control: no-cache, must-revalidate");
+    	header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
+    	
+    	header("Content-type: application/json");
+    	
+    	if ($mqtt->publish_sync($topic, $payload, $qos, $retained))
+    		echo 'OK';
+    	else
+    		echo 'FAIL';
+       	    	
+    	die();
+    }
 	
     	
 	public function ajaxACTION_doGetTopN() {
-		
-            global $wpdb;
+		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
+			return '';
+		}
+           
+		global $wpdb;
 	    $tqxparams = explode(';', $_GET['tqx']);
 	    $tqx = array();
 	    foreach($tqxparams as $tqxparam) {
@@ -373,7 +413,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    }
 	    
 	    //echo 'hello'.$_GET['from'].'hello';
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics']);    
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'], $_GET['order']);    
 	    //       echo( $_GET['topics']);
 	    //echo json_encode($table);
 	    $json = new stdClass();        
@@ -397,19 +437,103 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   die();
 	}
 	
+	public function doSet($atts,$content) {
+		
+		if (!$this->canUserDoRoleOption('MQTT_WriteAccessRole')) {
+			return '';
+		}
+		
+		$atts = array_change_key_case((array)$atts, CASE_LOWER);
+	
+		$atts = shortcode_atts([
+				'topic' => '',
+				'qos'=>'0',
+				'retained'=>'0',
+				'id'=>uniqid(),
+				'text'=>'+',
+				'css'=>'',
+				'style'=>'',
+				'options'=>''
+		], $atts, NULL);
+	
+		$currentvalue = $this->doGet($atts);
+		$id = $atts['id'];
+		$css = $atts['css'];
+		$style=$atts['style'];
+		$text=$atts['text'];
+		
+		$url = $this->getAjaxUrl('doSet&topic='.$atts['topic'].'&qos='.$atts['qos'].'&retained='.$atts['retained'].'&id='.$atts['id'].'&payload=');
+		
+		$script = "
+	 	<div id='$id' class='$css' style='$style'>
+	 		<input id='mqttcogs_set_$id' type='text' name='field1' value='$currentvalue'/><input type='submit' value='$text' onclick='setMQTTData$id()'></input>		
+	 	
+	 	 	<script type='text/javascript'>
+	    		   
+	      	function setMQTTData$id() {
+				
+				jQuery.get('$url' + document.getElementById('mqttcogs_set_$id').value,function( data ) {
+  					jQuery('.result' ).html( data );
+  					alert( 'Load was performed.' );
+					});
+	      	}  	
+	    	</script>
+		</div>";
+		
+		//set a transient here with role access??
+		
+		return $script;
+	}
+	
+	public function doGet($atts,$content=NULL) {
+		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
+			return '';
+		}
+		
+		$atts = array_change_key_case((array)$atts, CASE_LOWER);
+	
+		$atts = shortcode_atts([
+				'limit' => '1',
+				'topic' => '#',
+				'from'=>'',
+				'to'=>'',
+				'order'=>'DESC',
+				'field'=>'payload'
+		], $atts, NULL);
+	
+		//whattypes of queries
+		$table = $this->getTopN($atts['from'],$atts['to'],1,$atts['topic'],$atts['order']);
+	
+		if (sizeof($table->rows) == 0) 
+			return 'no rows';
+				
+		switch ($atts['field']) {
+			case "utc":
+				return $table->rows[0]->c[0]->v;
+			default:
+				return $table->rows[0]->c[1]->v;
+		}
+		
+		return '-'; 
+	}
 	
 	public function doData($atts,$content) {
+		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
+			return '';
+		}
+		
      	$atts = array_change_key_case((array)$atts, CASE_LOWER);
  
 	  $atts = shortcode_atts([
 	                                     'limit' => '100',
 	                                     'topics' => '#',
 	                                     'from'=>'',
-	                                     'to'=>''
+	                                     'to'=>'',
+	  									 'order'=>'DESC'
 	                                 ], $atts, NULL);
 
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics']);	
+		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['order']);	
 		$jsonret = json_encode($table);   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
@@ -417,7 +541,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   return $jsonret;		
 	}
 	
-	public function getTopN($from, $to, $limit, $topics) {
+	public function getTopN($from, $to, $limit, $topics, $order = 'ASC') {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('data');	
 	
@@ -445,7 +569,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    	$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');	
 	    
 	    	//get the data
-	    	 $therows =  $wpdb->get_results( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc desc limit $limit", ARRAY_A );
+	    	 $therows =  $wpdb->get_results( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc $order limit $limit", ARRAY_A );
 	    	 $this->write_log( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc desc limit $limit");
 	    	 
 	  	foreach($therows as $row) {
@@ -485,6 +609,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 
 	public function ajax_data($atts,$content) {
+		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
+			return '';
+		}
+		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
  
 	  $atts = shortcode_atts([
@@ -492,12 +620,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                     'topics' => '',
 	                                     'action' => 'doGetTopN',
 	                                     'from'=>'',
-	                                     'to'=>''
+	                                     'to'=>'',
+	  									 'order'=>'DESC'
 	                                 ], $atts, NULL);
 	  $limit = $atts['limit'];
 	  $topics = $atts['topics'];
 	 
-	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"]);                               
+	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&order='.$atts["order"]);                               
 	                                 
 	} 
 
