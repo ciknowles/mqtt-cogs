@@ -451,22 +451,27 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'retained'=>'0',
 				'id'=>uniqid(),
 				'text'=>'+',
-				'css'=>'',
+				'label'=>'',
+				'class'=>'',
 				'style'=>'',
 				'options'=>''
 		], $atts, NULL);
 	
 		$currentvalue = $this->doGet($atts);
 		$id = $atts['id'];
-		$css = $atts['css'];
+		$class = $atts['class'];
 		$style=$atts['style'];
 		$text=$atts['text'];
+		$label=$atts['label'];
 		
 		$url = $this->getAjaxUrl('doSet&topic='.$atts['topic'].'&qos='.$atts['qos'].'&retained='.$atts['retained'].'&id='.$atts['id'].'&payload=');
 		
 		$script = "
-	 	<div id='$id' class='$css' style='$style'>
-	 		<input id='mqttcogs_set_$id' type='text' name='field1' value='$currentvalue'/><input type='submit' value='$text' onclick='setMQTTData$id()'></input>		
+	 	<div id='$id' class='$class' style='$style'>
+	 		
+	 		<label for='mqttcogs_set_$id'>$label</label>
+	 		<input id='mqttcogs_set_$id' type='text' name='field1' value='$currentvalue'></input>
+	 		<input type='submit' value='$text' onclick='setMQTTData$id()'></input>		
 	 	
 	 	 	<script type='text/javascript'>
 	    		   
