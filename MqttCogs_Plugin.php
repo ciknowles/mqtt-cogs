@@ -346,7 +346,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     public function ajaxACTION_doSet() {
     
     	if (!$this->canUserDoRoleOption('MQTT_WriteAccessRole')) {
-    		return '';
+    		die();
     	}
     	
     	global $wpdb;
@@ -356,6 +356,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	$payload = $_GET['payload'];
     	$retain = (int) $_GET['retained'];
     	$id =  $_GET['id'];
+    	if (!wp_verify_nonce($_GET['wpn'], 'doSet')) {
+    		die();
+    	}
     	
     	//we now connect to the broker
     	$mqtt = new MQTT($this->getOption("MQTT_Server"), $atts['id']);
@@ -391,7 +394,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	header("Content-type: application/json");
     	
     	if ($mqtt->publish_sync($topic, $payload, $qos, $retained))
-    		echo 'OK';
+    		$payload;
     	else
     		echo 'FAIL';
        	    	
@@ -411,6 +414,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$item = explode(':',$tqxparam);
 		$tqx[$item[0]]=$item[1];
 	    }
+	    
+	    /*if (!wp_verify_nonce($_GET['wpn'], 'doGetTopN')) {
+	    	die();
+	    }*/
 	    
 	    //echo 'hello'.$_GET['from'].'hello';
 	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'], $_GET['order']);    
@@ -453,40 +460,56 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'text'=>'+',
 				'label'=>'',
 				'class'=>'',
-				'style'=>'',
-				'options'=>''
+				'options'=>'',
+				'restrictedtext'=>'Please log in to be able to publish to this topic',
+				'minrole'=>'Administrator'
 		], $atts, NULL);
 	
 		$currentvalue = $this->doGet($atts);
-		$id = $atts['id'];
+		$id =uniqid();
 		$class = $atts['class'];
-		$style=$atts['style'];
+	
 		$text=$atts['text'];
 		$label=$atts['label'];
+		$minrole=$atts['minrole'];
+		$wpn = wp_create_nonce('doSet');
+			
+		if (!$this->isUserRoleEqualOrBetterThan($minrole)) {
+			return $atts['restrictedtext'];
+		}
 		
-		$url = $this->getAjaxUrl('doSet&topic='.$atts['topic'].'&qos='.$atts['qos'].'&retained='.$atts['retained'].'&id='.$atts['id'].'&payload=');
+		//TODO: how do I enforce shortcode based role security to ajax call???
+		
+		$url = $this->getAjaxUrl('doSet&topic='.$atts['topic'].'&qos='.$atts['qos'].'&retained='.$atts['retained'].'&wpn='.$wpn.'&payload=');
 		
 		$script = "
 	 	<div id='$id' class='$class' style='$style'>
 	 		
 	 		<label for='mqttcogs_set_$id'>$label</label>
 	 		<input id='mqttcogs_set_$id' type='text' name='field1' value='$currentvalue'></input>
-	 		<input type='submit' value='$text' onclick='setMQTTData$id()'></input>		
+	 		<input id='mqttcogs_set_btn_$id' type='submit' value='$text' onclick='setMQTTData$id()'></input>		
 	 	
 	 	 	<script type='text/javascript'>
 	    		   
 	      	function setMQTTData$id() {
+				jQuery('#mqttcogs_set_btn_$id').prop('disabled', true);
 				
 				jQuery.get('$url' + document.getElementById('mqttcogs_set_$id').value,function( data ) {
-  					jQuery('.result' ).html( data );
-  					alert( 'Load was performed.' );
-					});
+  					//jQuery('#mqttcogs_set_$id' ).val(data);
+  					//location.reload();
+					})
+				  .fail(function() {
+				    alert( 'error' );
+				  })
+				  .always(function() {
+				    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
+				    
+				  });
+				
 	      	}  	
 	    	</script>
 		</div>";
-		
-		//set a transient here with role access??
-		
+			
 		return $script;
 	}
 	
@@ -503,18 +526,24 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'from'=>'',
 				'to'=>'',
 				'order'=>'DESC',
-				'field'=>'payload'
+				'field'=>'payload',
+				'local'=>'false',
+				'dateformat' => get_option( 'date_format' ) 
 		], $atts, NULL);
 	
 		//whattypes of queries
 		$table = $this->getTopN($atts['from'],$atts['to'],1,$atts['topic'],$atts['order']);
 	
 		if (sizeof($table->rows) == 0) 
-			return 'no rows';
+			return '';
+		
+		$local = !($atts['local'] === 'true');
 				
 		switch ($atts['field']) {
-			case "utc":
-				return $table->rows[0]->c[0]->v;
+			case "datetime":
+				$ret = str_replace('DSTART(', '', $table->rows[0]->c[0]->v);
+				$ret = str_replace(')DEND', '', $ret);
+				return  date_i18n($atts['dateformat'],  ((int) $ret)/1000, $local);
 			default:
 				return $table->rows[0]->c[1]->v;
 		}

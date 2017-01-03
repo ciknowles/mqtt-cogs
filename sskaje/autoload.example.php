@@ -54,9 +54,10 @@ function autoload($classname)
 
     if (strpos($filename, 'sskaje/') === 0) {
         $filename = substr($filename, strlen('sskaje/'));
+        require $filename;
     }
 
-    require $filename;
+    
 }
 
 \spl_autoload_register('sskaje\autoload');
