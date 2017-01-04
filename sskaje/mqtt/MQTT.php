@@ -146,7 +146,7 @@ class MQTT
      */
     public function __construct($address, $clientid=null)
     {
-		echo 'test';
+		
         # Create Socket Client Object
         $this->socket = new SocketClient($address);
         # New Command Store
