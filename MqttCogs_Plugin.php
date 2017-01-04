@@ -66,7 +66,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         return array(
             //'_version' => array('Installed Version'), // Leave this one commented-out. Uncomment to test upgrades.
             
-        	'MQTT_Version' => array(__('MQTT Server/Port', 'mqttcogs'), "3_1_1", "3_1"),
+        	'MQTT_Version' => array(__('MQTT Version', 'mqttcogs'), "3_1_1", "3_1"),
         	'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs')),
 			'MQTT_ClientID' => array(__('MQTT ClientID', 'mqttcogs')),
 			'MQTT_Username' => array(__('MQTT User', 'mqttcogs')),
@@ -270,7 +270,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			
 			$mqtt = new MQTT($this->getOption("MQTT_Server"), $this->getOption("MQTT_ClientID"));
 			
-			switch ($this->getOption("MQTT_Server")) {
+			switch ($this->getOption("MQTT_Version")) {
 				case "3_1_1":
 					$mqtt->setVersion(MQTT::VERSION_3_1_1);
 				default: 
@@ -356,9 +356,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	$payload = $_GET['payload'];
     	$retained = (int) $_GET['retained'];
     	$minrole = $_GET['minrole'];
+    	$pattern = $_GET['pattern'];
     	$id =  $_GET['id'];
     
-    	$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
+    	$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole&pattern=$pattern";
     	
     	//http://mqttcogs.sailresults.org/wp-admin/admin-ajax.php?action=doSet&topic=tests/blog/publishingdata&qos=0&retained=0&minrole=Subscriber&wpn=c49abe7f33&payload=15
     	
@@ -367,14 +368,18 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	}
     	
     	//check we are able to do role according to value in shortcode
-    	if (!$this->isUserRoleEqualOrBetterThan($atts['minrole'])) {
+    	if (!$this->isUserRoleEqualOrBetterThan($minrole)) {
     		die();
     	}
     	
+    	$json = new stdClass();
+    	$json->status = 'ok';
+    	
+    	 
     	//we now connect to the broker
     	$mqtt = new MQTT($this->getOption("MQTT_Server"), $atts['id']);
     		
-    	switch ($this->getOption("MQTT_Server")) {
+    	switch ($this->getOption("MQTT_Version")) {
     		case "3_1_1":
     			$mqtt->setVersion(MQTT::VERSION_3_1_1);
     		default:
@@ -392,23 +397,35 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	
     	if (!($result)) {
     		$this->write_log("doSet: MQTT can't connect");
-    		echo 'FAIL';
+    		$json->status = 'error';
+    		$error_1 = new stdClass();
+    		$error_1->reason='mqtt connection failure';
+    		$error_1->message = '';
+    		$json->errors = array();
+    		$json->errors.push($error_1); 		
     	}
     	
     	$this->write_log("doSet: MQTT connected");
+    	
     	
     	// Don't let IE cache this request
     	header("Pragma: no-cache");
     	header("Cache-Control: no-cache, must-revalidate");
     	header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
-    	
     	header("Content-type: application/json");
     	
-    	if ($mqtt->publish_sync($topic, $payload, $qos, $retained))
-    		$payload;
-    	else
-    		echo 'FAIL';
-       	    	
+    	if (!$mqtt->publish_sync($topic, $payload, $qos, $retained)) {
+    		$this->write_log("doSet: MQTT publish failure");
+    		$json->status = 'error';
+    		$error_1 = new stdClass();
+    		$error_1->reason='mqtt publish failure';
+    		$error_1->message = '';
+    		$json->errors = array();
+    		$json->errors.push($error_1);
+    	}
+    	
+    	$jsonret = json_encode($json);
+       	echo $jsonret;	
     	die();
     }
 	
@@ -463,25 +480,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
 	
-		//title for input
-		//type for input
-		//pattern for input
-		//placeholder for input
-		//step for input
-		//value
-		//size
-		//min
-		//max
-		//list_values
-		//list_text
-		
-		
-		//regex
-		//hint
-		//placeholder
-		//opt_values
-		//opt_text
-		
 		
 		$atts = shortcode_atts([
 				'topic' => '',
@@ -489,16 +487,16 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'retained'=>'0',
 				'id'=>uniqid(),
 				'class'=>'',
-				'text'=>'+',
-				'label'=>'',
-			/*	'button_text'=>'+',
+				'button_text'=>'+',
 				'label_text'=>'',
-				'input_validation'=>'',
-				'input_hint'=>,
-				'input_placeholder'=>
-				'input_'
-				'opts_text'=>'',
-				'opts_value'=>'',*/
+				
+				'input_type'=> 'text',
+				'input_title' => '',
+				'input_pattern' => '',
+				'input_min'=> '',
+				'input_max'=> '',
+				'input_step'=>'',
+				
 				'restrictedtext'=>'Please log in to be able to publish to this topic',
 				'minrole'=>'Administrator'
 		], $atts, NULL);
@@ -510,15 +508,22 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$qos = $atts['qos'];
 		$retained = $atts['retained'];
 		$minrole = $atts['minrole'];
-		$label = $atts['label'];
-		$text = $atts['text'];
-		
 		
 		if (!$this->isUserRoleEqualOrBetterThan($atts['minrole'])) {
 			return $atts['restrictedtext'];
-		}	
-
-		$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
+		}
+		
+		$label = $atts['label_text'];
+		
+		$button_text = $atts['button_text'];
+		$input_title = $atts['input_title']==''?"":"title='".$atts['input_title']."'";
+		$input_pattern = $atts['input_pattern']==''?"":"pattern='".$atts['input_pattern']."'";
+		$input_type = ($atts['input_type']=='')?"":"type='".$atts['input_type']."'";
+		$input_min = $atts['input_min']==''?"":"min='".$atts['input_min']."'";
+		$input_max = $atts['input_max']==''?"":"max='".$atts['input_max']."'";
+		$input_step = $atts['input_step']==''?"":"step='".$atts['input_step']."'";
+		
+		$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole&pattern=$pattern";
 		$wpn = wp_create_nonce($action);
 		$action = "$action&wpn=$wpn&payload=";
 	
@@ -531,25 +536,34 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	 	<div id='$id' class='$class'>
 	 		
 	 		<label for='mqttcogs_set_$id'>$label</label>
-	 		<input id='mqttcogs_set_$id' type='text' name='field1' value='$currentvalue'></input>
-	 		<input id='mqttcogs_set_btn_$id' type='submit' value='$text' onclick='setMQTTData$id()'></input>		
+	 		<input id='mqttcogs_set_$id' value='$currentvalue' $input_type $input_title $input_pattern $input_min $input_max $input_step >
+	 		<input id='mqttcogs_set_btn_$id' type='submit' value='$button_text' onclick='setMQTTData$id()'>
 	 	
 	 	 	<script type='text/javascript'>
 	    		   
+	 	 	jQuery('#mqttcogs_set_$id').focusin(function () {
+	 	 		jQuery('#mqttcogs_set_btn_$id').val('$button_text');
+	 	 	});
+	 	 	
 	      	function setMQTTData$id() {
-				jQuery('#mqttcogs_set_btn_$id').prop('disabled', true);
-				
-				jQuery.get('$url' + document.getElementById('mqttcogs_set_$id').value,function( data ) {
-  					//jQuery('#mqttcogs_set_$id' ).val(data);
-  					//location.reload();
-					})
-				  .fail(function() {
-				    alert( 'error' );
-				  })
-				  .always(function() {
-				    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
-				    
-				  });
+	      		
+	      		if (jQuery('#mqttcogs_set_$id')[0].checkValidity()) { 
+					jQuery('#mqttcogs_set_btn_$id').prop('disabled', true);
+					
+					jQuery.get('$url' + document.getElementById('mqttcogs_set_$id').value,function( data ) {
+					
+	  					jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+	  					
+	  					//location.reload();
+						})
+					  .fail(function(data) {
+					    alert( 'error' + data);
+					  })
+					  .always(function() {
+					    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
+					    
+					  });
+				 }
 	      	}  	
 	    	</script>
 		</div>";
