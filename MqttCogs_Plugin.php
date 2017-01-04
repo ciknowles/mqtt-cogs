@@ -65,7 +65,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         //http://plugin.michael-simpson.com/?page_id=31
         return array(
             //'_version' => array('Installed Version'), // Leave this one commented-out. Uncomment to test upgrades.
-            'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs')),
+            
+        	'MQTT_Version' => array(__('MQTT Server/Port', 'mqttcogs'), "3_1_1", "3_1"),
+        	'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs')),
 			'MQTT_ClientID' => array(__('MQTT ClientID', 'mqttcogs')),
 			'MQTT_Username' => array(__('MQTT User', 'mqttcogs')),
 			'MQTT_Password' => array(__('MQTT Password', 'mqttcogs')),
@@ -76,9 +78,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					'Forever', '365 Days', '165 Days', '30 Days', '7 Days', '1 Day'),
                                 
             'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs')),
-        		
-        	//get the user roles here...
-        	
+        		      	
         		
         	'MQTT_ReadAccessRole' => $readroles,
         	'MQTT_WriteAccessRole' => $writeroles
@@ -354,9 +354,20 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	$topic = $_GET['topic'];
     	$qos = (int) $_GET['qos'];
     	$payload = $_GET['payload'];
-    	$retain = (int) $_GET['retained'];
+    	$retained = (int) $_GET['retained'];
+    	$minrole = $_GET['minrole'];
     	$id =  $_GET['id'];
-    	if (!wp_verify_nonce($_GET['wpn'], 'doSet')) {
+    
+    	$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
+    	
+    	//http://mqttcogs.sailresults.org/wp-admin/admin-ajax.php?action=doSet&topic=tests/blog/publishingdata&qos=0&retained=0&minrole=Subscriber&wpn=c49abe7f33&payload=15
+    	
+    	if (!check_ajax_referer($action, 'wpn')) {
+    		die();
+    	}
+    	
+    	//check we are able to do role according to value in shortcode
+    	if (!$this->isUserRoleEqualOrBetterThan($atts['minrole'])) {
     		die();
     	}
     	
@@ -452,15 +463,42 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
 	
+		//title for input
+		//type for input
+		//pattern for input
+		//placeholder for input
+		//step for input
+		//value
+		//size
+		//min
+		//max
+		//list_values
+		//list_text
+		
+		
+		//regex
+		//hint
+		//placeholder
+		//opt_values
+		//opt_text
+		
+		
 		$atts = shortcode_atts([
 				'topic' => '',
 				'qos'=>'0',
 				'retained'=>'0',
 				'id'=>uniqid(),
+				'class'=>'',
 				'text'=>'+',
 				'label'=>'',
-				'class'=>'',
-				'options'=>'',
+			/*	'button_text'=>'+',
+				'label_text'=>'',
+				'input_validation'=>'',
+				'input_hint'=>,
+				'input_placeholder'=>
+				'input_'
+				'opts_text'=>'',
+				'opts_value'=>'',*/
 				'restrictedtext'=>'Please log in to be able to publish to this topic',
 				'minrole'=>'Administrator'
 		], $atts, NULL);
@@ -468,22 +506,29 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$currentvalue = $this->doGet($atts);
 		$id =uniqid();
 		$class = $atts['class'];
-	
-		$text=$atts['text'];
-		$label=$atts['label'];
-		$minrole=$atts['minrole'];
-		$wpn = wp_create_nonce('doSet');
-			
-		if (!$this->isUserRoleEqualOrBetterThan($minrole)) {
+		$topic = $atts['topic'];
+		$qos = $atts['qos'];
+		$retained = $atts['retained'];
+		$minrole = $atts['minrole'];
+		$label = $atts['label'];
+		$text = $atts['text'];
+		
+		
+		if (!$this->isUserRoleEqualOrBetterThan($atts['minrole'])) {
 			return $atts['restrictedtext'];
-		}
+		}	
+
+		$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
+		$wpn = wp_create_nonce($action);
+		$action = "$action&wpn=$wpn&payload=";
+	
+		$url = $this->getAjaxUrl($action);
 		
-		//TODO: how do I enforce shortcode based role security to ajax call???
 		
-		$url = $this->getAjaxUrl('doSet&topic='.$atts['topic'].'&qos='.$atts['qos'].'&retained='.$atts['retained'].'&wpn='.$wpn.'&payload=');
+		//TODO: how to notify user that update was successful
 		
 		$script = "
-	 	<div id='$id' class='$class' style='$style'>
+	 	<div id='$id' class='$class'>
 	 		
 	 		<label for='mqttcogs_set_$id'>$label</label>
 	 		<input id='mqttcogs_set_$id' type='text' name='field1' value='$currentvalue'></input>
@@ -505,7 +550,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
 				    
 				  });
-				
 	      	}  	
 	    	</script>
 		</div>";
@@ -591,6 +635,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    		
 	    $topics = explode(',',$topics);
 	    
+	    //prevent sql injection here
+	    if ($order != 'ASC') {
+	    	$order = 'DESC';
+	    }
+	    
 	    $index=0;
 	    $json = new stdClass(); 
 	    $json->cols = array();
@@ -600,12 +649,24 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    foreach($topics as $topic) {
 	    	
 	    	//add the next column definition
-	    	$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');	
-	    
-	    	//get the data
-	    	 $therows =  $wpdb->get_results( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc $order limit $limit", ARRAY_A );
-	    	 $this->write_log( "SELECT `utc`,`payload` from $table_name WHERE topic='$topic' AND ((utc>='$from' OR '$from'='') AND (utc<='$to' OR '$to'='')) order by utc desc limit $limit");
+	    	$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');		    	
+	    	
+	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
+	    	 						WHERE topic=%s 
+	    	 						AND ((utc>=%s OR %s='') 
+	    	 						AND (utc<=%s OR %s='')) 
+	    	 						order by utc $order limit %d",
+	    	 						$topic,
+	    	 						$from,
+	    	 						$from,
+	    	 						$to,
+	    	 						$to,
+	    	 						$limit			
+	    	 				        );
 	    	 
+	    	 $therows =  $wpdb->get_results(
+	    	 		$sql		, ARRAY_A );
+	    		    	 
 	  	foreach($therows as $row) {
 	  		$o = new stdClass();
 			$o->c = array();
@@ -622,8 +683,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  				else {
 		  				$o->c[] = json_decode('{"v":"'.$row['payload'].'"}');   
 	  				}
-	  				
-		        		
 	  			}
 	  			else {
 	  				$o->c[] = json_decode('{"v":null}');  
