@@ -1,11 +1,13 @@
 <?php
 require(__DIR__ . '/./sskaje/autoload.example.php');
+require(__DIR__ . '/./flock/Lock.php');
 
 include_once('MqttCogs_LifeCycle.php');
 
 use \sskaje\mqtt\MQTT;
 use \sskaje\mqtt\Debug;
 use \sskaje\mqtt\MessageHandler;
+use \flock\Lock;
 
 class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
@@ -214,6 +216,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	add_action('wp_ajax_doSet', array(&$this, 'ajaxACTION_doSet'));
 	add_action('wp_ajax_nopriv_doSet', array(&$this, 'ajaxACTION_doSet')); // optional
 
+	
+	
    	}
    	   	 
     	public function enqueueStylesAndScripts() {
@@ -243,21 +247,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
 	function do_mqtt_watchdog() {
 		
-		//$this->write_log("Watchdog called...");
+	try {
+		$file = './mqttcogs_lock.pid';
+		$lock = new flock\Lock($file);
 		
+		// Non-blocking case. Acquire lock if it's free, otherwse exit immediately
 		$gmt_time = microtime( true );
-		
-		// The cron lock: a unix timestamp from when the cron was spawned.
-		$doing_mqtt_transient = get_transient( 'doing_mqtt' );
-
-		if ( empty( $doing_mqtt_transient ) ) {
-				$doing_mqtt_transient = sprintf( '%.22F', microtime( true ) );
-				set_transient( 'doing_mqtt', $doing_mqtt_transient );
-			
+	
+		if ($lock->acquire()) { 
 		        register_shutdown_function(array($this, 'shutdownHandler'));
-        		//set_error_handler(array($this, 'errorHandler'));
-        		Debug::Enable();
         		
+        		Debug::Enable();
         		Debug::SetLogPriority(Debug::INFO);
         		
         		if ("false" == $this->getOption("MQTT_Recycle", "false")) {
@@ -266,61 +266,68 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         		
         		$recycle_secs = intval($this->getOption("MQTT_Recycle"));
         		
-		
-			
-			$mqtt = new MQTT($this->getOption("MQTT_Server"), $this->getOption("MQTT_ClientID"));
-			
-			switch ($this->getOption("MQTT_Version")) {
-				case "3_1_1":
-					$mqtt->setVersion(MQTT::VERSION_3_1_1);
-				default: 
-					$mqtt->setVersion(MQTT::VERSION_3_1 );
-			}
-			
-			$context = stream_context_create();
-			$mqtt->setSocketContext($context);
+				$mqtt = new MQTT($this->getOption("MQTT_Server"), $this->getOption("MQTT_ClientID"));
 				
-			if ($this->getOption("MQTT_Username")) {
-				$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
-			}
-			
-			$result = $mqtt->connect();
-						
-			if (!($result)) {
-				$this->write_log("MQTT can't connect");
-				delete_transient( 'doing_mqtt' );
-				return;
-			}
-
-			$this->write_log("phpMQTT connected");
-			
-			$topics[$this->getOption("MQTT_TopicFilter")] = 1;
-			$callback = new MySubscribeCallback($this);
-			$mqtt->setHandler($callback);
-			$mqtt->subscribe($topics);
-						
-			try 
-			{
+				switch ($this->getOption("MQTT_Version")) {
+					case "3_1_1":
+						$mqtt->setVersion(MQTT::VERSION_3_1_1);
+					default: 
+						$mqtt->setVersion(MQTT::VERSION_3_1 );
+				}
+				
+				$context = stream_context_create();
+				$mqtt->setSocketContext($context);
+					
+				if ($this->getOption("MQTT_Username")) {
+					$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
+				}
+				
+				$result = $mqtt->connect();
+							
+				if (!($result)) {
+					$this->write_log("MQTT can't connect");
+					
+					return;
+				}
+	
+				$this->write_log("phpMQTT connected");
 				$this->mqtt = $mqtt;
 				
-				while($mqtt->loop() && !empty(get_transient( 'doing_mqtt' )) && (microtime(true)-$gmt_time<$recycle_secs)) {
+				$topics[$this->getOption("MQTT_TopicFilter")] = 1;
+				$callback = new MySubscribeCallback($this);
+				$mqtt->setHandler($callback);
+				$mqtt->subscribe($topics);
+						
+			
+			
+				
+				while(($this->mqtt) && (microtime(true)-$gmt_time<$recycle_secs) && $mqtt->loop()) {
 					set_time_limit(0);
 				}
 				
 				$this->write_log("disconnecting");
 				$mqtt->disconnect();
-				
 			}
-			catch (Exception $e) {
-				$this->write_log($e->getMessage());
-				$mqtt.disconnect();
-			}
-			finally {
-				$this->mqtt = NULL;
-				delete_transient( 'doing_mqtt' );									
-			}
+			
 		}
 		
+		catch (Exception $e) {
+				$this->write_log($e->getMessage());
+				if (!empty($mqtt)) {
+					$mqtt->disconnect();
+				}
+		}
+		finally {
+				$this->mqtt = NULL;
+				if (!empty($lock)) {
+					try {
+						$lock->release();	
+					}	
+					catch (Exception $ee) {
+						$this->write_log($ee->getMessage());
+					}
+				}
+		}
 	}	
 	
     public function errorHandler($error_level, $error_message, $error_file, $error_line, $error_context)
@@ -830,22 +837,24 @@ class MySubscribeCallback extends MessageHandler
 		$this->mqttcogs_plugin->write_log('constructed handler');
 	}
 			
-	public function publish($mqtt, sskaje\mqtt\Message\PUBLISH $publish_object)
+	public function publish($mqtt, $publish_object)
 	{
 		global $wpdb;
 		try
 		{
 			$this->mqttcogs_plugin->write_log('message received');
-		
 			$this->mqttcogs_plugin->write_log( $publish_object->getTopic());
 			$this->mqttcogs_plugin->write_log( $publish_object->getMessage());
 		
 			$tableName = $this->mqttcogs_plugin->prefixTableName('data');
+			$utc = current_time( 'mysql', true );
+		
+			apply_filters('mqttcogs_msg_in_pre',$publish_object->getMessage() , $utc, $publish_object->getTopic());
 		
 			$wpdb->insert(
 					$tableName,
 					array(
-							'utc' => current_time( 'mysql', true ),
+							'utc' => $utc,
 							'topic' => $publish_object->getTopic(),
 							'payload' => $publish_object->getMessage()
 					),
@@ -855,22 +864,17 @@ class MySubscribeCallback extends MessageHandler
 							'%s'
 					)
 					);
+					
+			apply_filters('mqttcogs_msg_in_pre',$publish_object->getMessage() , $utc, $publish_object->getTopic());
 		}
 		catch (Exception $e) {
 			$this->mqttcogs_plugin->write_log($e->getMessage());
-			delete_transient( 'doing_mqtt' );
-			$mqtt->disconnect();
+				//force loop to exit
+			$this->mqttcogs_plugin->mqtt = null;
 			
+			//attempt graceful disconnect
+			$mqtt->disconnect();
 		}
-		
-		/*printf(
-				"\e[32mI got a message\e[0m:(msgid=%d, QoS=%d, dup=%d, topic=%s) \e[32m%s\e[0m\n",
-				$publish_object->getMsgID(),
-				$publish_object->getQoS(),
-				$publish_object->getDup(),
-				$publish_object->getTopic(),
-				$publish_object->getMessage()
-				);*/
 	}
 }
 
