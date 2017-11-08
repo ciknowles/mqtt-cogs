@@ -2,6 +2,11 @@
 require(__DIR__ . '/./sskaje/autoload.example.php');
 require(__DIR__ . '/./flock/Lock.php');
 
+require_once __DIR__ . '/./AutoLoadByNamespace.php';
+
+spl_autoload_register("AutoloadByNamespace::autoload");
+AutoloadByNamespace::register("Google\Visualization\DataSource", __DIR__ . '/./google-visualization');
+
 include_once('MqttCogs_LifeCycle.php');
 
 use \sskaje\mqtt\MQTT;
@@ -9,22 +14,17 @@ use \sskaje\mqtt\Debug;
 use \sskaje\mqtt\MessageHandler;
 use \flock\Lock;
 
+//See http://plugin.michael-simpson.com
 class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
     public $mqtt;
 
-    public function write_log ( $log )  {
-            if ( is_array( $log ) || is_object( $log ) ) {
-                error_log( print_r( $log, true ) );
-            } else {
-                error_log( $log );
-            }
-    }
+    
 
-
+    //called when the plugin is activated
     public function activate() {
-    		
-		$this->write_log("activate");
+        Debug::Log(DEBUG::INFO,"MqttCogs plugin activated");		
+		
 		if (! wp_next_scheduled ( 'mqtt_cogs_watchdog' )) {
 			wp_schedule_event(time(), '1min', 'mqtt_cogs_watchdog');
 	    }
@@ -35,17 +35,23 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
     }
     
-  
+    //called when the plugin is deactivated
     public function deactivate() {
 		wp_clear_scheduled_hook('mqtt_cogs_watchdog');
 		delete_transient( 'doing_mqtt' );
 		wp_clear_scheduled_hook('mqtt_cogs_prune');
+		
+		
+		try {
+		    $file = './mqttcogs_lock.pid';    
+		    unlink($file);
+		}
+		catch (Exception $e) {
+		        Debug::Log(DEBUG::ERR, $e->getMessage());
+		}
     }
 
-    /**
-     * See: http://plugin.michael-simpson.com/?page_id=31
-     * @return array of option meta data.
-     */
+    //returns a list of settings for plugin
     public function getOptionMetaData() {
 		global $wp_roles;
     	
@@ -55,16 +61,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}
 			
     	$readroles = array_merge(array(__('MQTT Read Role', 'mqttcogs')),  $arr);
-    	//$this->write_log(var_dump($arr));
-    
+
     	$writeroles = array('Contributor') +  $arr;
-    	$this->write_log(var_dump($arr));
+    //	$this->write_log(var_dump($arr));
     	
     	$writeroles = array_merge(array(__('MQTT Write Role', 'mqttcogs')), $arr);
     	
-    	
-        
-        //http://plugin.michael-simpson.com/?page_id=31
         return array(
             //'_version' => array('Installed Version'), // Leave this one commented-out. Uncomment to test upgrades.
             
@@ -80,15 +82,14 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					'Forever', '365 Days', '165 Days', '30 Days', '7 Days', '1 Day'),
                                 
             'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs')),
+            'MQTT_Debug' => array(__('MQTT Debug', 'mqttcogs'), 'On', 'Off'),
         		      	
-        		
         	'MQTT_ReadAccessRole' => $readroles,
         	'MQTT_WriteAccessRole' => $writeroles
-			
         );
     }
 
-
+    //initializes options on first run
     protected function initOptions() {
         $options = $this->getOptionMetaData();
         if (!empty($options)) {
@@ -99,7 +100,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             }
         }
     }
-
+    
     public function getPluginDisplayName() {
         return 'Mqtt Cogs';
     }
@@ -117,7 +118,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
      * @return void
      */
     public function installDatabaseTables() {
-		$this->write_log("installing db");        
+        Debug::Log(DEBUG::INFO, 'Installing MqttCogs database table');
+		
 		
 		
 			global $wpdb;
@@ -141,7 +143,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
      * @return void
      */
     public function unInstallDatabaseTables() {
-		$this->write_log("Removing database...");
+	    Debug::Log(DEBUG::INFO, 'Removing MqttCogs database table');
+		
 		
                 global $wpdb;
                 $tableName = $this->prefixTableName('data');
@@ -173,13 +176,14 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
         // Add Actions & Filters
         // http://plugin.michael-simpson.com/?page_id=37
-	//add_action('admin_enqueue_scripts', array(&$this, 'load_google'));
-	//add_action( 'wp_enqueue_scripts', array(&$this, 'load_google') );
-	add_action('wp_enqueue_scripts', array(&$this, 'enqueueStylesAndScripts'));
+    	add_action('wp_enqueue_scripts', array(&$this, 'enqueueStylesAndScripts'));
 	
 	
-	add_action('mqtt_cogs_watchdog', array(&$this, 'do_mqtt_watchdog'));
-	add_action('mqtt_cogs_prune', array(&$this, 'do_mqtt_prune'));
+	    //makes sure mqtt reader is active
+	    add_action('mqtt_cogs_watchdog', array(&$this, 'do_mqtt_watchdog'));
+	    
+	    //prunes the database
+	    add_action('mqtt_cogs_prune', array(&$this, 'do_mqtt_prune'));
 
 
         // Adding scripts & styles to all pages
@@ -188,42 +192,42 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         //        wp_enqueue_style('my-style', plugins_url('/css/my-style.css', __FILE__));
         //        fwp_enqueue_script('my-script', plugins_url('/js/my-script.js', __FILE__));
 
-	//  wp_enqueue_script('googlecharts','https://www.gstatic.com/charts/loader.js', __FILE__ );
-
+	    //  wp_enqueue_script('googlecharts','https://www.gstatic.com/charts/loader.js', __FILE__ );
 
         // Register short codes
         // http://plugin.michael-simpson.com/?page_id=39
 	 
-	 add_shortcode('mqttcogs_drawgoogle', array($this, 'doDrawGoogle'));
+    	 add_shortcode('mqttcogs_drawgoogle', array($this, 'doDrawGoogle'));
+    	 add_shortcode('mqttcogs_graph', array($this, 'doDrawGoogle2'));
+	
 	 
-	 add_shortcode('mqttcogs_data', array($this, 'doData'));	
-	 add_shortcode('mqttcogs_ajax_data', array($this, 'ajax_data'));
-	 add_shortcode('mqttcogs_get', array($this, 'doGet'));
-	 
-	 add_shortcode('mqttcogs_set', array($this, 'doSet'));
+    	 add_shortcode('mqttcogs_data', array($this, 'doData'));	
+    	 add_shortcode('mqttcogs_ajax_data', array($this, 'ajax_data'));
 
+    	 add_shortcode('mqttcogs_get', array($this, 'doGet'));
+    	 add_shortcode('mqttcogs_set', array($this, 'doSet'));
+	 
+		 
         // Register AJAX hooks
         // http://plugin.michael-simpson.com/?page_id=41
-		
-	//	add_action( 'update_option', 'action_update_option', 10, 3 ); 
-		
-	//	add_action( 'update_option', string $option, mixed $old_value, mixed $value )
-	
-	add_action('wp_ajax_doGetTopN', array(&$this, 'ajaxACTION_doGetTopN'));
-	
-	add_action('wp_ajax_nopriv_doGetTopN', array(&$this, 'ajaxACTION_doGetTopN')); // optional
-	
-	add_action('wp_ajax_doSet', array(&$this, 'ajaxACTION_doSet'));
-	add_action('wp_ajax_nopriv_doSet', array(&$this, 'ajaxACTION_doSet')); // optional
-
-	
-	
+    	add_action('wp_ajax_doGetTopN', array(&$this, 'ajaxACTION_doGetTopN'));
+    	
+    	add_action('wp_ajax_nopriv_doGetTopN', array(&$this, 'ajaxACTION_doGetTopN')); 
+    	
+    	add_action('wp_ajax_doSet', array(&$this, 'ajaxACTION_doSet'));
+    	add_action('wp_ajax_nopriv_doSet', array(&$this, 'ajaxACTION_doSet'));
+    
+    	add_action('wp_ajax_doSQL', array(&$this, 'ajaxACTION_doSQL'));
+    	add_action('wp_ajax_nopriv_doSQL', array(&$this, 'ajaxACTION_doSQL'));
    	}
    	   	 
-    	public function enqueueStylesAndScripts() {
-		wp_enqueue_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
-    	}
+	public function enqueueStylesAndScripts() {
+	wp_enqueue_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
+	wp_enqueue_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
 
+	}
+
+    //prunes the mqttcogs database table. Run daily
 	function do_mqtt_prune() {
 		global $wpdb;
 		
@@ -238,13 +242,14 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		//DATEDIFF(d1,d2) -- value in days
 				
-	        $table_name = $this->prefixTableName('data');
-
+	    $table_name = $this->prefixTableName('data');
 		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
-		$this->write_log($sql);			
+	//	$this->write_log($sql);			
+	    Debug::Log(DEBUG::INFO, 'Pruning MqttCogs database table');
 		$wpdb->query($sql);										
 	}    
 
+    //
 	function do_mqtt_watchdog() {
 		
 	try {
@@ -257,8 +262,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		if ($lock->acquire()) { 
 		        register_shutdown_function(array($this, 'shutdownHandler'));
         		
-        		Debug::Enable();
-        		Debug::SetLogPriority(Debug::INFO);
+        		if ("on" == $this->getOption("MQTT_Debug", "on")) {
+        		    Debug::Enable();
+        		    Debug::SetLogPriority(Debug::INFO);	
+        		}
+        		else {
+        		    Debug::Disable();
+        		}
+        		
+        		
         		
         		if ("false" == $this->getOption("MQTT_Recycle", "false")) {
         			$this->addOption("MQTT_Recycle", "295");
@@ -285,12 +297,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				$result = $mqtt->connect();
 							
 				if (!($result)) {
-					$this->write_log("MQTT can't connect");
-					
+				    Debug::Log(DEBUG::ERR, "MQTT can't connect");
 					return;
 				}
 	
-				$this->write_log("phpMQTT connected");
+			//	$this->write_log("phpMQTT connected");
 				$this->mqtt = $mqtt;
 				
 				$topics[$this->getOption("MQTT_TopicFilter")] = 1;
@@ -298,21 +309,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				$mqtt->setHandler($callback);
 				$mqtt->subscribe($topics);
 						
-			
-			
-				
 				while(($this->mqtt) && (microtime(true)-$gmt_time<$recycle_secs) && $mqtt->loop()) {
 					set_time_limit(0);
 				}
 				
-				$this->write_log("disconnecting");
+			//	$this->write_log("disconnecting");
 				$mqtt->disconnect();
 			}
-			
 		}
 		
 		catch (Exception $e) {
-				$this->write_log($e->getMessage());
+		      Debug::Log(DEBUG::ERR, $e->getMessage());
 				if (!empty($mqtt)) {
 					$mqtt->disconnect();
 				}
@@ -324,7 +331,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 						$lock->release();	
 					}	
 					catch (Exception $ee) {
-						$this->write_log($ee->getMessage());
+						   Debug::Log(DEBUG::ERR, $ee->getMessage());
 					}
 				}
 		}
@@ -333,19 +340,18 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     public function errorHandler($error_level, $error_message, $error_file, $error_line, $error_context)
     {
         $error = "lvl: " . $error_level . " | msg:" . $error_message . " | file:" . $error_file . " | ln:" . $error_line;
-
-	$this->write_log($error);
+	      Debug::Log(DEBUG::ERR, $error);
     }
 
     public function shutdownHandler() //will be called when php script ends.
     {
-         $lasterror = error_get_last();
-	 $error = "[SHUTDOWN] lvl:" . $lasterror['type'] . " | msg:" . $lasterror['message'] . " | file:" . $lasterror['file'] . " | ln:" . $lasterror['line'];            
-         $this->write_log($error, "fatal");
+        $lasterror = error_get_last();
+	    $error = "[SHUTDOWN] lvl:" . $lasterror['type'] . " | msg:" . $lasterror['message'] . " | file:" . $lasterror['file'] . " | ln:" . $lasterror['line'];            
+        
+           Debug::Log(DEBUG::ERR, $error);
+         
     }
 	
-	
- 
 	
     /*
      * Called to set a mqtt value
@@ -367,9 +373,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	$id =  $_GET['id'];
     
     	$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole&pattern=$pattern";
-    	
-    	//http://mqttcogs.sailresults.org/wp-admin/admin-ajax.php?action=doSet&topic=tests/blog/publishingdata&qos=0&retained=0&minrole=Subscriber&wpn=c49abe7f33&payload=15
-    	
+
     	if (!check_ajax_referer($action, 'wpn')) {
     		die();
     	}
@@ -382,7 +386,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	$json = new stdClass();
     	$json->status = 'ok';
     	
-    	 
     	//we now connect to the broker
     	$mqtt = new MQTT($this->getOption("MQTT_Server"), $atts['id']);
     		
@@ -403,8 +406,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	$result = $mqtt->connect();
     	
     	if (!($result)) {
-    		$this->write_log("doSet: MQTT can't connect");
-    		$json->status = 'error';
+    	    Debug::Log(DEBUG::ERR,"doSet: MQTT can't connect");
+        		$json->status = 'error';
     		$error_1 = new stdClass();
     		$error_1->reason='mqtt connection failure';
     		$error_1->message = '';
@@ -412,25 +415,29 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     		$json->errors.push($error_1); 		
     	}
     	
-    	$this->write_log("doSet: MQTT connected");
-    	
-    	
-    	// Don't let IE cache this request
-    	header("Pragma: no-cache");
-    	header("Cache-Control: no-cache, must-revalidate");
-    	header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
-    	header("Content-type: application/json");
-    	
-    	if (!$mqtt->publish_sync($topic, $payload, $qos, $retained)) {
-    		$this->write_log("doSet: MQTT publish failure");
-    		$json->status = 'error';
-    		$error_1 = new stdClass();
-    		$error_1->reason='mqtt publish failure';
-    		$error_1->message = '';
-    		$json->errors = array();
-    		$json->errors.push($error_1);
+    	else {
+        //	$this->write_log("doSet: MQTT connected");
+        	
+        	
+        	// Don't let IE cache this request
+        	header("Pragma: no-cache");
+        	header("Cache-Control: no-cache, must-revalidate");
+        	header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
+        	header("Content-type: application/json");
+        	
+        	if (!$mqtt->publish_sync($topic, $payload, $qos, $retained)) {
+        	    Debug::Log(DEBUG::ERR,"doSet: MQTT publish failure");
+        		
+        		$json->status = 'error';
+        		$error_1 = new stdClass();
+        		$error_1->reason='mqtt publish failure';
+        		$error_1->message = '';
+        		$json->errors = array();
+        		$json->errors.push($error_1);
+        	}
     	}
     	
+    	Debug::Log(DEBUG::INFO,"doSet: MQTT publish success");
     	$jsonret = json_encode($json);
        	echo $jsonret;	
     	die();
@@ -454,8 +461,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    	die();
 	    }*/
 	    
-	    //echo 'hello'.$_GET['from'].'hello';
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'], $_GET['order']);    
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'], $_GET['order'],$_GET['jsonfields']);    
 	    //       echo( $_GET['topics']);
 	    //echo json_encode($table);
 	    $json = new stdClass();        
@@ -559,7 +565,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					
 					jQuery.get('$url' + document.getElementById('mqttcogs_set_$id').value,function( data ) {
 					
-	  					jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+					    if (data.status == 'ok') {
+    	  					jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+	  					}
+	  					else {
+	  					    alert('Error!');
+	  					}
+	  					
 	  					
 	  					//location.reload();
 						})
@@ -624,15 +636,16 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
      	$atts = array_change_key_case((array)$atts, CASE_LOWER);
  
 	  $atts = shortcode_atts([
-	                                     'limit' => '100',
+	                                     'limit' => '999999',
 	                                     'topics' => '#',
 	                                     'from'=>'',
 	                                     'to'=>'',
-	  									 'order'=>'DESC'
+	  									 'order'=>'DESC',
+	  									 'jsonfields'=>''
 	                                 ], $atts, NULL);
 
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['order']);	
+		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['order'],$atts['jsonfields']);	
 		$jsonret = json_encode($table);   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
@@ -640,20 +653,25 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   return $jsonret;		
 	}
 	
-	public function getTopN($from, $to, $limit, $topics, $order = 'ASC') {
+	public function getTopN($from, $to, $limit, $topics, $order = 'ASC', $jsonfields='') {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('data');	
-	
+	  
 	    if (is_numeric($from)) {
+	       
 	    	$from = time() + floatval($from)*86400;
 	    	$from = date('Y-m-d H:i:s', $from);
+	    
 	    }
 	    
 	    if (is_numeric($to)) {
 	    	$to = time() + floatval($to)*86400;
 	    	$to = date('Y-m-d H:i:s', $to);
 	    }
-	    		
+	    	
+	   // $this->write_log($topics);
+	   // $this->write_log($from);
+	
 	    $topics = explode(',',$topics);
 	    
 	    //prevent sql injection here
@@ -665,62 +683,181 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $json = new stdClass(); 
 	    $json->cols = array();
 	    $json->rows = array();
-	    //add the datetime column
-	    $json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
-	    foreach($topics as $topic) {
-	    	
-	    	//add the next column definition
-	    	$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');		    	
-	    	
-	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
-	    	 						WHERE topic=%s 
-	    	 						AND ((utc>=%s OR %s='') 
-	    	 						AND (utc<=%s OR %s='')) 
-	    	 						order by utc $order limit %d",
-	    	 						$topic,
-	    	 						$from,
-	    	 						$from,
-	    	 						$to,
-	    	 						$to,
-	    	 						$limit			
-	    	 				        );
-	    	 
-	    	 $therows =  $wpdb->get_results(
-	    	 		$sql		, ARRAY_A );
-	    		    	 
-	  	foreach($therows as $row) {
-	  		$o = new stdClass();
-			$o->c = array();
-		        $o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
-	  		
-	  		
-	  		//loop through columns
-	  		for($i = 0; $i < count($topics); ++$i){
-	  			
-	  			if ($i==$index) {
-	  				if (is_numeric($row['payload'])) {
-		  				$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
-	  				}
-	  				else {
-		  				$o->c[] = json_decode('{"v":"'.$row['payload'].'"}');   
-	  				}
-	  			}
-	  			else {
-	  				$o->c[] = json_decode('{"v":null}');  
-	  			}
-  			}	
-			
-			 
-		        $json->rows[] =$o;
+	    
+	    //if not json then we decode as we have always
+	    if ($jsonfields=='') {
+    	    //add the datetime column
+    	    $json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
+    	    foreach($topics as $topic) {
+    	    	
+    	    	//add the next column definition
+    	    	$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');		    	
+    	    	
+    	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
+    	    	 						WHERE topic=%s 
+    	    	 						AND ((utc>=%s OR %s='') 
+    	    	 						AND (utc<=%s OR %s='')) 
+    	    	 						order by utc $order limit %d",
+    	    	 						$topic,
+    	    	 						$from,
+    	    	 						$from,
+    	    	 						$to,
+    	    	 						$to,
+    	    	 						$limit			
+    	    	 				        );
+    	    	 
+    	    	 $therows =  $wpdb->get_results(
+    	    	 		$sql		, ARRAY_A );
+    	    		    	 
+    	  	foreach($therows as $row) {
+    	  		$o = new stdClass();
+    			$o->c = array();
+    		        $o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
+    	  		
+    	  		
+    	  		//loop through columns
+    	  		for($i = 0; $i < count($topics); ++$i){
+    	  			
+    	  			if ($i==$index) {
+    	  				if (is_numeric($row['payload'])) {
+    		  				$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
+    	  				}
+    	  				else {
+    		  				$o->c[] = json_decode('{"v":"'.$row['payload'].'"}');   
+    	  				}
+    	  			}
+    	  			else {
+    	  				$o->c[] = json_decode('{"v":null}');  
+    	  			}
+      			}	
+    			
+    			 
+    		        $json->rows[] =$o;
+    	        }
+    	      
+    	    	$index++; 
+    	    } 	 
+	    }
+	    //we are returning json data....
+	    
+	    else {
+	         $jsonpropsraw = explode(',', $jsonfields);
+	         $jsonprops= array();
+	         $jsontypes= array();
+	         
+	         foreach($jsonpropsraw as $prop) {
+	             $nameandtype = explode('|', $prop);
+	             $jsonprops[] = $nameandtype[0];
+	             if (sizeof($nameandtype)==2) {
+    	         	 $json->cols[] = json_decode('{"id":"'.$nameandtype[0].'", "label":"'.$nameandtype[0].'", "type":"'.$nameandtype[1].'"}');
+    	         	 $jsontypes[] = $nameandtype[1];
+	             }
+	             else {
+	                  $json->cols[] = json_decode('{"id":"'.$nameandtype[0].'", "label":"'.$nameandtype[0].'", "type":"number"}');
+	                  $jsontypes[] = 'number';
+	             }
+	         }
+	         
+	         foreach($topics as $topic) {
+        	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
+        	    	 						WHERE topic=%s 
+        	    	 						AND ((utc>=%s OR %s='') 
+        	    	 						AND (utc<=%s OR %s='')) 
+        	    	 						order by utc $order limit %d",
+        	    	 						$topic,
+        	    	 						$from,
+        	    	 						$from,
+        	    	 						$to,
+        	    	 						$to,
+        	    	 						$limit			
+        	    	 				        );
+        	    	 
+        	    	 $therows =  $wpdb->get_results(
+        	    	 		$sql		, ARRAY_A );
+        	    		    	 
+        	    try
+        	    {
+        	        foreach($therows as $row) {
+            	  		$o = new stdClass();
+            			$o->c = array();
+            			
+            	        $payload =json_decode($row['payload'], true);
+            	        
+            	        for ($col = 0; $col < sizeof($jsonprops); $col++) {
+            	            $prop = $jsonprops[$col];
+                            switch ($jsontypes) {
+                                
+                                case 'datetime':
+                                    $dtm = strtotime($payload[$prop]);
+                                    $o->c[] = json_decode('{"v":"new Date('.$dtm.')"}');   
+                                    break;
+                                case 'number':
+                               
+                                 	$o->c[] = json_decode('{"v":'.$payload[$prop].'}');    
+                                    break;    
+                                case 'string':
+                                    $o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
+                                    break;
+                                default:
+                                    if (is_numeric($payload[$prop])) {
+                		  				$o->c[] = json_decode('{"v":'.$payload[$prop].'}'); 
+                	  				}
+                	  				else {
+                		  				$o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
+                	  				}      
+                                    break;
+                            }
+                        } 
+            	        
+            	        
+    	        	  /*  foreach($jsonprops as $prop) {
+        	  			    if (is_numeric($payload[$prop])) {
+        		  				$o->c[] = json_decode('{"v":'.$payload[$prop].'}'); 
+        	  				}
+        	  				else {
+        		  				$o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
+        	  				}        
+    	  			    }*/
+            	  			
+              		    $json->rows[] =$o;
+        	        }
+        	    }
+        	    catch(Exception $e) {
+        	        Log(DEBUG::ERR,$e->getMessage());
+        	    }
 	        }
-	      
-	    	$index++; 
-	    } 	 
+	        
+	    }
 	    
 	   return $json;    
-	 
-	   
+	
 	}
+	
+	
+	
+	public function ajaxACTION_doSQL() {
+		/*if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
+			return '';
+		}*/
+           
+           header("Pragma: no-cache");
+	    header("Cache-Control: no-cache, must-revalidate");
+	    header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
+	 
+	    /*header("Content-type: text/plain");*/
+	   
+    
+          $table_name = $this->prefixTableName('data');	
+          
+     
+	   new MyDataSource($table_name);
+	    
+	   die();
+	   
+	  
+	}
+	
+	
 
 	public function ajax_data($atts,$content) {
 		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
@@ -730,49 +867,142 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
  
 	  $atts = shortcode_atts([
-	                                     'limit' => '100',
+	                                     'limit' => '999999',
 	                                     'topics' => '',
 	                                     'action' => 'doGetTopN',
 	                                     'from'=>'',
 	                                     'to'=>'',
-	  									 'order'=>'DESC'
+	  									 'order'=>'DESC',
+	  									 'jsonfields'=>''
 	                                 ], $atts, NULL);
 	  $limit = $atts['limit'];
 	  $topics = $atts['topics'];
 	 
-	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&order='.$atts["order"]);                               
+	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&order='.$atts["order"].'&jsonfields='.$atts["jsonfields"]);                               
 	                                 
 	} 
-
-	public function doDrawGoogle($atts,$content) {
- 	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
+	
+	public function doDrawGoogle2($atts,$content) {
+	 /* wp_enqueue_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));*/
+	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
  
+ 	  
 	  $atts = shortcode_atts([
 	                                     'charttype' => 'LineChart',
 	                                     'options' => '{"width":400,"height":300}',
-					     'ajax'=>'false',
-					     'refresh_secs'=>60
+					     'refresh_secs'=>60,
+					     'query'=>'SELECT utc,payload LIMIT 1'
 	                                 ], $atts, NULL);
 	
+	$script = '';// 'monkey'.$atts['query'];
 	$id = uniqid();
         $options = $atts["options"];
         $charttype = $atts["charttype"];
+	$refresh_secs = $atts["refresh_secs"];
+	$query = explode('|', urldecode($atts["query"]));
+	
+	$querystring =  $this->getAjaxUrl('doSQL');   
+
+	$script = $script.'
+	 <div id="'.$id.'">
+	 <script type="text/javascript">
+		google.charts.setOnLoadCallback(drawChart'.$id.');
+
+		function drawChart'.$id.'() {
+
+	        var allresults=[];
+	        allresults.length = '.count($query).';';
+	      
+	        
+	for ($queryid = 0; $queryid  <= count($query)-1; $queryid ++) {
+  		 $script = $script.'var query = new google.visualization.Query("'.$querystring.'");
+  		  allresults['.$queryid.'] =undefined;
+  		  query.setQuery("'.$query[$queryid].'");
+  		   query.send(function (response) {
+       				  handleResponse'.$id.'(response, '.$queryid.');
+			    }); 
+  		   
+  		   if ('.$refresh_secs.'>0) {
+		     	query.setRefreshInterval('.$refresh_secs.');
+		   }';
+	 }
+	
+	$script = $script.'	   
+  	
+  	 	  
+  		   function handleResponse'.$id.'(response, id) {
+			if (response.isError()) {
+	    			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());
+	     			return;
+		        }
+	
+		   	allresults[id] = response.getDataTable();	 
+			
+			//if all are loaded then we join them
+			for(var idx=0;idx<allresults.length-1;idx++){
+				if (!allresults[idx]) {
+					return;
+				}	
+			}   	
+			var joinedData = allresults[0];
+
+
+			var columns = [];
+			if (allresults.length>1) {
+				$.each(allresults, function (index, datatable) {
+			        if (index != 0) {
+			            columns.push(index);
+			            joinedData = google.visualization.data.join(joinedData, datatable, "full", [[0, 0]], columns, [1]);
+			        }
+			    });
+			}
+	   	
+	   		var chart = new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
+			chart.draw(joinedData , '.$options.');
+	   		
+	   	  
+	  
+	      } //handlerespoonse
+	      }//drawchart
+	    </script></div>';
+	   
+    	return $script;	
+	}
+	
+	
+	//////
+
+	public function doDrawGoogle($atts,$content) {
+      
+ 	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
+ 
+	  $atts = shortcode_atts([
+	                           'charttype' => 'LineChart',
+	                            'options' => '{"width":400,"height":300}',
+					            'ajax'=>'true',
+					            'refresh_secs'=>60
+	                       ], $atts, NULL);
+	
+	$id = uniqid();
+	
+    $options = $atts["options"];
+    $charttype = $atts["charttype"];
+   
 	$refresh_secs = $atts["refresh_secs"];
 	if ($atts["ajax"]=='false') {
 		$script = '
 	 <div id="'.$id.'">
 	 <script type="text/javascript">
-	    '.$this->getGoogleLoadJS($charttype).'
 	      google.charts.setOnLoadCallback(drawChart'.$id.');
 	      
 	      function drawChart'.$id.'() {
-		var data = new google.visualization.DataTable('.strip_tags(do_shortcode($content)).');	
+	      var data = new google.visualization.DataTable('.strip_tags(do_shortcode($content)).');	
 		
 	        var chart = new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
 	        chart.draw(data, '.$options.');      
 	      }
 	    </script></div>';
-    	    return $script;
+        return $script;
 	}
 	else {
 
@@ -781,38 +1011,35 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	$conent = trim($content);
 	$content = str_replace(array('\r', '\n'), '', trim($content));	
 
-	
-	
 	$content = strip_tags(do_shortcode($content));
-			
 	$querystring =  str_replace(array("\r", "\n"), '', $content);
-
 
 	$script = '
 	 <div id="'.$id.'">
 	 <script type="text/javascript">
-		'.$this->getGoogleLoadJS($charttype).'
-	     
 	      google.charts.setOnLoadCallback(drawChart'.$id.');
-	            
-	    
+	        
+	      var chart'.$id.';
+	      var query'.$id.';
 	      function drawChart'.$id.'() {
-		      var query = new google.visualization.Query("'.$querystring.'");
-		      query.send(handleResponse'.$id.');
-		      if ('.$refresh_secs.'>0) {
-		      	query.setRefreshInterval('.$refresh_secs.');
-		      }
+	          chart'.$id.'= new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
+
+		      query'.$id.' = new google.visualization.Query("'.$querystring.'");
+		      query'.$id.'.send(handleResponse'.$id.');
 	      }
 	      
 	      function handleResponse'.$id.'(response) {
-		if (response.isError()) {
+	    	if (response.isError()) {
     			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());
      			return;
 	        }
 
-	   	var data = response.getDataTable();	   
-	        var chart = new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
-	        chart.draw(data, '.$options.');
+	   	    var data = response.getDataTable();	 
+	        chart'.$id.'.draw(data, '.$options.');
+	        
+	        setTimeout(function () {
+	            query'.$id.'.send(handleResponse'.$id.');
+	        },'.$refresh_secs.'*1000);
 	      }
 	    </script></div>';
     	return $script;	
@@ -821,7 +1048,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 
 	function getGoogleLoadJS($charttype) {
-		return 	 'google.charts.load("current", {"packages":["corechart","bar","table"]});';
+		return 	 'google.charts.load("current", {"packages":["corechart","bar","table","gauge","map"]});';
 
 	}
 }
@@ -834,7 +1061,6 @@ class MySubscribeCallback extends MessageHandler
 	public function __construct($theownerobject)
 	{
 		$this->mqttcogs_plugin = $theownerobject;
-		$this->mqttcogs_plugin->write_log('constructed handler');
 	}
 			
 	public function publish($mqtt, $publish_object)
@@ -842,14 +1068,16 @@ class MySubscribeCallback extends MessageHandler
 		global $wpdb;
 		try
 		{
-			$this->mqttcogs_plugin->write_log('message received');
-			$this->mqttcogs_plugin->write_log( $publish_object->getTopic());
-			$this->mqttcogs_plugin->write_log( $publish_object->getMessage());
+		    $topic = $publish_object->getTopic();
+		    $msg = $publish_object->getMessage();
+		    Debug::Log(DEBUG::INFO,
+		    "MqttCogs msg received {$topic}, {$msg}");
+		   
 		
 			$tableName = $this->mqttcogs_plugin->prefixTableName('data');
 			$utc = current_time( 'mysql', true );
 		
-			apply_filters('mqttcogs_msg_in_pre',$publish_object->getMessage() , $utc, $publish_object->getTopic());
+			$publish_object = apply_filters('mqttcogs_msg_in_pre',$publish_object, $utc);
 		
 			$wpdb->insert(
 					$tableName,
@@ -864,12 +1092,12 @@ class MySubscribeCallback extends MessageHandler
 							'%s'
 					)
 					);
-					
-			apply_filters('mqttcogs_msg_in_pre',$publish_object->getMessage() , $utc, $publish_object->getTopic());
+			$publish_object = apply_filters('mqttcogs_msg_in',$publish_object, $utc);
 		}
 		catch (Exception $e) {
-			$this->mqttcogs_plugin->write_log($e->getMessage());
-				//force loop to exit
+		        Debug::Log(DEBUG::ERR,$e->getMessage());
+	
+					//force loop to exit
 			$this->mqttcogs_plugin->mqtt = null;
 			
 			//attempt graceful disconnect
@@ -877,4 +1105,31 @@ class MySubscribeCallback extends MessageHandler
 		}
 	}
 }
+
+ // The custom class that defines how the data is generated
+ class MyDataSource extends Google\Visualization\DataSource\DataSource
+  {
+    private $table;
+	
+    public function __construct($table)
+    {
+	$this->table = $table;	
+
+        $_REQUEST['tq'] = stripslashes ($_REQUEST['tq']);
+
+	parent::__construct();
+    }
+	
+    public function getCapabilities() { return Google\Visualization\DataSource\Capabilities::SQL; }
+
+    public function generateDataTable(Google\Visualization\DataSource\Query\Query $query)
+    {          
+     
+
+      global $wpdb; 
+      return Google\Visualization\DataSource\Util\WPDataSourceHelper::executeQuery($query, $wpdb, $this->table);
+    }
+
+    public function isRestrictedAccessMode() { return FALSE; }
+ }
 
