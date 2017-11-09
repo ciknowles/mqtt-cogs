@@ -461,7 +461,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    	die();
 	    }*/
 	    
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'], $_GET['order'],$_GET['jsonfields']);    
+	    $topic = $this->replaceWordpressUser($_GET['topics']);
+	    
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $topic, $_GET['order'],$_GET['jsonfields']);    
 	    //       echo( $_GET['topics']);
 	    //echo json_encode($table);
 	    $json = new stdClass();        
@@ -483,6 +485,18 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    
 	   echo $jsonret;
 	   die();
+	}
+	
+	private function replaceWordpressUser($somestring) {
+	     $current_user = wp_get_current_user();
+	     if ( !($current_user instanceof WP_User) )
+            return $somestring;
+     
+        foreach($current_user as $key => $value) {
+            $somestring = str_replace('{'.$key.'}',$somestring, $value);    
+        }
+        
+        return $somestring;
 	}
 	
 	public function doSet($atts,$content) {
@@ -979,17 +993,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  $atts = shortcode_atts([
 	                           'charttype' => 'LineChart',
 	                            'options' => '{"width":400,"height":300}',
-					            'ajax'=>'true',
 					            'refresh_secs'=>60
 	                       ], $atts, NULL);
 	
 	$id = uniqid();
+	$ajax = ($atts['refresh_secs'] > 0);
 	
     $options = $atts["options"];
     $charttype = $atts["charttype"];
    
 	$refresh_secs = $atts["refresh_secs"];
-	if ($atts["ajax"]=='false') {
+	if (!$atts["ajax"]) {
 		$script = '
 	 <div id="'.$id.'">
 	 <script type="text/javascript">
