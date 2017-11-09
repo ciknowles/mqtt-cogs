@@ -379,7 +379,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	}
     	
     	//check we are able to do role according to value in shortcode
-    	if (!$this->isUserRoleEqualOrBetterThan($minrole)) {
+    	if (($minrole!='') && (!$this->isUserRoleEqualOrBetterThan($minrole))) {
     		die();
     	}
     	
@@ -461,9 +461,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    	die();
 	    }*/
 	    
-	    $topic = $this->replaceWordpressUser($_GET['topics']);
-	    
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $topic, $_GET['order'],$_GET['jsonfields']);    
+	       
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'], $_GET['order'],$_GET['jsonfields']);    
 	    //       echo( $_GET['topics']);
 	    //echo json_encode($table);
 	    $json = new stdClass();        
@@ -493,7 +492,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             return $somestring;
      
         foreach($current_user as $key => $value) {
-            $somestring = str_replace('{'.$key.'}',$somestring, $value);    
+            if (is_numeric($value) || is_string($value)) {
+                $somestring = str_replace('{'.$key.'}', strval($value), $somestring);    
+            }
         }
         
         return $somestring;
@@ -506,7 +507,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}
 		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
-	
 		
 		$atts = shortcode_atts([
 				'topic' => '',
@@ -525,18 +525,19 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'input_step'=>'',
 				
 				'restrictedtext'=>'Please log in to be able to publish to this topic',
-				'minrole'=>'Administrator'
+				'minrole'=>''
 		], $atts, NULL);
 	
 		$currentvalue = $this->doGet($atts);
 		$id =uniqid();
 		$class = $atts['class'];
-		$topic = $atts['topic'];
+		$topic =  $this->replaceWordpressUser($atts['topic']);
+	
 		$qos = $atts['qos'];
 		$retained = $atts['retained'];
 		$minrole = $atts['minrole'];
 		
-		if (!$this->isUserRoleEqualOrBetterThan($atts['minrole'])) {
+		if (($atts['minrole']!='') && (!$this->isUserRoleEqualOrBetterThan($atts['minrole']))) {
 			return $atts['restrictedtext'];
 		}
 		
@@ -704,6 +705,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    $json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
     	    foreach($topics as $topic) {
     	    	
+    	    	$topic = $this->replaceWordpressUser($topic);
     	    	//add the next column definition
     	    	$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');		    	
     	    	
@@ -773,6 +775,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	         }
 	         
 	         foreach($topics as $topic) {
+	             	$topic = $this->replaceWordpressUser($topic);
         	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
         	    	 						WHERE topic=%s 
         	    	 						AND ((utc>=%s OR %s='') 
