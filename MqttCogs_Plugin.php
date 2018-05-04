@@ -1080,7 +1080,7 @@ class MySubscribeCallback extends MessageHandler
 		$this->mqttcogs_plugin = $theownerobject;
 	}
 			
-	public function publish($mqtt, $publish_object)
+	public function publish(sskaje\mqtt\MQTT $mqtt,sskaje\mqtt\Message\PUBLISH $publish_object)
 	{
 		global $wpdb;
 		try
