@@ -286,8 +286,26 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					default: 
 						$mqtt->setVersion(MQTT::VERSION_3_1 );
 				}
-				
-				$context = stream_context_create();
+			
+				if (strpos($this->getOption("MQTT_Server"), 'ssl://') === 0) {
+					 $mqtt->setSocketContext(stream_context_create([
+						   'ssl' => [
+							/*   'cafile'                => '/path/to/CACert-mqtt.crt',*/
+							   'verify_peer'           => false,
+							   'verify_peer_name'      => false,
+							   'disable_compression'   => true,
+							   'ciphers'               => 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:AES128:AES256:RC4-SHA:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK',
+							   'crypto_method'         => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_SSLv23_CLIENT,
+							   'SNI_enabled'           => true,
+							   'allow_self_signed'     => true
+						   ]
+						]
+					 ));
+				}
+				else {	
+					$context = stream_context_create();
+				}
+			
 				$mqtt->setSocketContext($context);
 					
 				if ($this->getOption("MQTT_Username")) {
@@ -1110,6 +1128,16 @@ class MySubscribeCallback extends MessageHandler
 					)
 					);
 			$publish_object = apply_filters('mqttcogs_msg_in',$publish_object, $utc);
+			
+			do_action_ref_array(
+								'after_mqttcogs_msg_in',
+								array(
+									$utc,
+									$publish_object->getTopic(),
+									$publish_object->getMessage()
+								)
+							);
+
 		}
 		catch (Exception $e) {
 		        Debug::Log(DEBUG::ERR,$e->getMessage());

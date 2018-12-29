@@ -1114,7 +1114,7 @@ class MQTT
             # check if any commands awaits or topics to subscribe
             if (!$this->cmdstore->countWaits() && empty($this->topics) && empty($this->topics_to_subscribe)) {
                 Debug::Log(Debug::INFO, "loop(): No tasks, leaving...");
-				return true;
+                return true;
             }
 
             # Subscribe topics
