@@ -1161,7 +1161,7 @@ class MQTT
      */
     public function keepalive()
     {
-        Debug::Log(Debug::DEBUG, 'keepalive()');
+       // Debug::Log(Debug::DEBUG, 'keepalive()');
 
         $current_time = time();
 

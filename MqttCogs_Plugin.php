@@ -19,8 +19,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
     public $mqtt;
 
-    
-
+/*
+	function __construct() {
+		
+		
+	}*/
+		
     //called when the plugin is activated
     public function activate() {
         Debug::Log(DEBUG::INFO,"MqttCogs plugin activated");		
@@ -32,7 +36,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    if (! wp_next_scheduled ( 'mqtt_cogs_prune' )) {
 			wp_schedule_event(time(), 'daily', 'mqtt_cogs_prune');
 	    }
-
     }
     
     //called when the plugin is deactivated
@@ -40,8 +43,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		wp_clear_scheduled_hook('mqtt_cogs_watchdog');
 		delete_transient( 'doing_mqtt' );
 		wp_clear_scheduled_hook('mqtt_cogs_prune');
-		
-		
+				
 		try {
 		    $file = './mqttcogs_lock.pid';    
 		    unlink($file);
@@ -82,7 +84,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					'Forever', '365 Days', '165 Days', '30 Days', '7 Days', '1 Day'),
                                 
             'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs')),
-            'MQTT_Debug' => array(__('MQTT Debug', 'mqttcogs'), 'On', 'Off'),
+            
+            'MQTT_Debug' => array(__('MQTT Debug', 'mqttcogs'), 'All', 'Info', 'None'),
         		      	
         	'MQTT_ReadAccessRole' => $readroles,
         	'MQTT_WriteAccessRole' => $writeroles
@@ -101,6 +104,24 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         }
     }
     
+	public function setupLogging() {
+		error_log("setupLogging");	
+		switch($this->getOption("MQTT_Debug", "Info")) {
+        		    case "All":
+        		      
+        		        Debug::SetLogPriority(Debug::ALL);	
+						break;
+        		    case "Info":
+        		      
+        		        Debug::SetLogPriority(Debug::INFO);	
+						break;
+        		    case "None":
+        		        Debug::Disable();
+					
+						break;
+        }
+	}
+	
     public function getPluginDisplayName() {
         return 'Mqtt Cogs';
     }
@@ -120,21 +141,42 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     public function installDatabaseTables() {
         Debug::Log(DEBUG::INFO, 'Installing MqttCogs database table');
 		
+		global $wpdb;
+		$table_name = $this->prefixTableName('data');				
+		$charset_collate = $wpdb->get_charset_collate();
+					
+		$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		utc  datetime NOT NULL,
+		topic tinytext NOT NULL,
+		payload text NOT NULL,
+		qos tinyint NOT NULL,
+		retain tinyint NOT NULL,
+		PRIMARY KEY  (id)
+		) $charset_collate;";
 		
+		$wpdb->query($sql);
+	
+		$sql = "ALTER TABLE $table_name ADD INDEX `idx_data_topic` (`topic`(50), `utc`);";
+		$wpdb->query($sql);
 		
-			global $wpdb;
-			$table_name = $this->prefixTableName('data');				
-			$charset_collate = $wpdb->get_charset_collate();
-						
-			$sql = "CREATE TABLE $table_name (
-			id bigint(20) NOT NULL AUTO_INCREMENT,
-			utc  datetime NOT NULL,
-			topic tinytext NOT NULL,
-			payload text NOT NULL,
-			PRIMARY KEY  (id)
-			) $charset_collate;";
-			
-			$wpdb->query($sql);
+		$table_name = $this->prefixTableName('buffer');				
+		$charset_collate = $wpdb->get_charset_collate();
+					
+		$sql = "CREATE TABLE $table_name (
+		id bigint(20) NOT NULL AUTO_INCREMENT,
+		utc  datetime NOT NULL,
+		topic tinytext NOT NULL,
+		payload text NOT NULL,
+		qos tinyint NOT NULL,
+		retain tinyint NOT NULL,
+		PRIMARY KEY  (id)
+		) $charset_collate;";
+		
+		$wpdb->query($sql);
+	
+		$sql = "ALTER TABLE $table_name ADD INDEX `idx_buffer_topic` (`topic`(50), `utc`);";
+		$wpdb->query($sql);
     }
 
     /**
@@ -144,11 +186,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
      */
     public function unInstallDatabaseTables() {
 	    Debug::Log(DEBUG::INFO, 'Removing MqttCogs database table');
-		
-		
-                global $wpdb;
-                $tableName = $this->prefixTableName('data');
-                $wpdb->query("DROP TABLE IF EXISTS '$tableName'");
+			
+		global $wpdb;
+		$tableName = $this->prefixTableName('data');
+		$wpdb->query("DROP TABLE IF EXISTS `$tableName`");
     }
 
 
@@ -197,16 +238,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         // Register short codes
         // http://plugin.michael-simpson.com/?page_id=39
 	 
-    	 add_shortcode('mqttcogs_drawgoogle', array($this, 'doDrawGoogle'));
-    	 add_shortcode('mqttcogs_graph', array($this, 'doDrawGoogle2'));
+    	 add_shortcode('mqttcogs_drawgoogle', array($this, 'shortcodeDrawGoogle'));
+    	 add_shortcode('mqttcogs_graph', array($this, 'shortcodeDrawGoogle2'));
 	
 	 
-    	 add_shortcode('mqttcogs_data', array($this, 'doData'));	
+    	 add_shortcode('mqttcogs_data', array($this, 'shortcodeData'));	
     	 add_shortcode('mqttcogs_ajax_data', array($this, 'ajax_data'));
 
-    	 add_shortcode('mqttcogs_get', array($this, 'doGet'));
-    	 add_shortcode('mqttcogs_set', array($this, 'doSet'));
+    	 add_shortcode('mqttcogs_get', array($this, 'shortcodeGet'));
+    	 add_shortcode('mqttcogs_set', array($this, 'shortcodeSet'));
 	 
+		//add_action( 'init', array($this, 'setupLogging'));
 		 
         // Register AJAX hooks
         // http://plugin.michael-simpson.com/?page_id=41
@@ -222,13 +264,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
    	}
    	   	 
 	public function enqueueStylesAndScripts() {
-	wp_enqueue_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
-	wp_enqueue_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-
+		wp_enqueue_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
+		wp_enqueue_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
 	}
 
     //prunes the mqttcogs database table. Run daily
 	function do_mqtt_prune() {
+		$this->setupLogging();
 		global $wpdb;
 		
 		$dur = explode(' ', $this->getOption("MQTT_KeepArchive", "Forever"));
@@ -240,19 +282,25 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			$dur = intval($dur[0]);
 		}
 		
-		//DATEDIFF(d1,d2) -- value in days
-				
+		//DATEDIFF(d1,d2) -- value in days				
 	    $table_name = $this->prefixTableName('data');
 		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
-	//	$this->write_log($sql);			
+	//$this->write_log($sql);			
 	    Debug::Log(DEBUG::INFO, 'Pruning MqttCogs database table');
 		$wpdb->query($sql);										
+		
+		/*$table_name = $this->prefixTableName('buffer');
+		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
+	//$this->write_log($sql);			
+	    Debug::Log(DEBUG::INFO, 'Pruning MqttCogs buffer table');
+		$wpdb->query($sql);										*/
 	}    
 
     //
 	function do_mqtt_watchdog() {
 		
 	try {
+		$this->setupLogging();
 		$file = './mqttcogs_lock.pid';
 		$lock = new flock\Lock($file);
 		
@@ -262,55 +310,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		if ($lock->acquire()) { 
 		        register_shutdown_function(array($this, 'shutdownHandler'));
         		
-        		if ("on" == $this->getOption("MQTT_Debug", "on")) {
-        		    Debug::Enable();
-        		    Debug::SetLogPriority(Debug::INFO);	
-        		}
-        		else {
-        		    Debug::Disable();
-        		}
-        		
-        		
-        		
         		if ("false" == $this->getOption("MQTT_Recycle", "false")) {
         			$this->addOption("MQTT_Recycle", "295");
         		}
         		
         		$recycle_secs = intval($this->getOption("MQTT_Recycle"));
         		
-				$mqtt = new MQTT($this->getOption("MQTT_Server"), $this->getOption("MQTT_ClientID"));
-				
-				switch ($this->getOption("MQTT_Version")) {
-					case "3_1_1":
-						$mqtt->setVersion(MQTT::VERSION_3_1_1);
-					default: 
-						$mqtt->setVersion(MQTT::VERSION_3_1 );
-				}
-			
-				if (strpos($this->getOption("MQTT_Server"), 'ssl://') === 0) {
-					 $mqtt->setSocketContext(stream_context_create([
-						   'ssl' => [
-							/*   'cafile'                => '/path/to/CACert-mqtt.crt',*/
-							   'verify_peer'           => false,
-							   'verify_peer_name'      => false,
-							   'disable_compression'   => true,
-							   'ciphers'               => 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:AES128:AES256:RC4-SHA:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK',
-							   'crypto_method'         => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_SSLv23_CLIENT,
-							   'SNI_enabled'           => true,
-							   'allow_self_signed'     => true
-						   ]
-						]
-					 ));
-				}
-				else {	
-					$context = stream_context_create();
-				}
-			
-				$mqtt->setSocketContext($context);
-					
-				if ($this->getOption("MQTT_Username")) {
-					$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
-				}
+				$mqtt = $this->buildMQTTClient($this->getOption("MQTT_ClientID"));
 				
 				$result = $mqtt->connect();
 							
@@ -319,7 +325,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					return;
 				}
 	
-			//	$this->write_log("phpMQTT connected");
 				$this->mqtt = $mqtt;
 				
 				$topics[$this->getOption("MQTT_TopicFilter")] = 1;
@@ -331,7 +336,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					set_time_limit(0);
 				}
 				
-			//	$this->write_log("disconnecting");
 				$mqtt->disconnect();
 			}
 		}
@@ -349,7 +353,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 						$lock->release();	
 					}	
 					catch (Exception $ee) {
-						   Debug::Log(DEBUG::ERR, $ee->getMessage());
+						   Debug::Log(DEBUG::DEBUG, $ee->getMessage());
 					}
 				}
 		}
@@ -366,21 +370,141 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         $lasterror = error_get_last();
 	    $error = "[SHUTDOWN] lvl:" . $lasterror['type'] . " | msg:" . $lasterror['message'] . " | file:" . $lasterror['file'] . " | ln:" . $lasterror['line'];            
         
-           Debug::Log(DEBUG::ERR, $error);
-         
+           Debug::Log(DEBUG::ERR, $error);  
     }
 	
+	public function buildMQTTClient($cid) {
+		$mqtt = new MQTT($this->getOption("MQTT_Server"), $cid);
+    		
+		switch ($this->getOption("MQTT_Version")) {
+			case "3_1_1":
+				$mqtt->setVersion(MQTT::VERSION_3_1_1);
+				break;
+			default: 
+				$mqtt->setVersion(MQTT::VERSION_3_1 );
+				break;
+		}
+	
+		if (strpos($this->getOption("MQTT_Server"), 'ssl://') === 0) {
+			 $mqtt->setSocketContext(stream_context_create([
+				   'ssl' => [
+					/*   'cafile'                => '/path/to/CACert-mqtt.crt',*/
+					   'verify_peer'           => false,
+					   'verify_peer_name'      => false,
+					   'disable_compression'   => true,
+					   'ciphers'               => 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:ECDHE-RSA-RC4-SHA:ECDHE-ECDSA-RC4-SHA:AES128:AES256:RC4-SHA:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!3DES:!MD5:!PSK',
+					   'crypto_method'         => STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT | STREAM_CRYPTO_METHOD_SSLv23_CLIENT,
+					   'SNI_enabled'           => true,
+					   'allow_self_signed'     => true
+				   ]
+				]
+			 ));
+		}
+		else {	
+			$mqtt->setSocketContext(stream_context_create());
+		}
+						
+		if ($this->getOption("MQTT_Username")) {
+			$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
+		}
+		return $mqtt;
+	}
+	
+	
+	public function isNodeOnline($topic, $rootkey) {
+		$pieces = explode("/", $topic);
+			
+		//mysensors_out/10/255/3/0/32
+		if (count($pieces)<6)  {
+			return true;				
+		}
+		
+		$key = $pieces[0];
+		$key = $rootkey;
+		
+		$nodeid = $pieces[1];
+		$sensor = $pieces[2];
+		$cmd = $pieces[3];
+		$ack = $pieces[4];
+		$type = $pieces[5];
+		
+		$rows = $this->getLastN('data', $key.'/'.$nodeid.'/'.$sensor.'/255/3/0/32', 1);
+		if (count($rows)==1) {
+			//$rows[0]['utc']
+			//are we within the window?
+			return false;
+		}			
+		return false;
+	}
+	
+	public function bufferMessage($utc, $topic,$payload,$qos,$retained) {
+		global $wpdb;
+		$tableName = $this->prefixTableName('buffer');
+		$utc = current_time( 'mysql', true );
+		$wpdb->insert(
+				$tableName,
+				array(
+						'utc' => $utc,
+						'topic' => $topic,
+						'payload' => $payload,
+						'qos' =>$qos,
+						'retain' => $retained
+				),
+				array(
+						'%s',
+						'%s',
+						'%s',
+						'%d',
+						'%d'
+				)
+			);
+	}
+	
+	public function sendMqtt($id, $topic, $payload, $qos, $retained, $json) {
+	//if online send to broker
+    	$mqtt = $this->buildMQTTClient($id);
+    	    		
+    	$result = $mqtt->connect();
+    	
+    	if (!($result)) {
+    	    Debug::Log(DEBUG::ERR,"doSet: MQTT can't connect");
+        		$json->status = 'error';
+    		$error_1 = new stdClass();
+    		$error_1->reason='mqtt connection failure';
+    		$error_1->message = '';
+    		$json->errors = array();
+    		$json->errors.push($error_1); 	
+			return false;
+    	}
+    	else {   	
+        	if (!$mqtt->publish_sync($topic, $payload, $qos, $retained)) {
+        	    Debug::Log(DEBUG::ERR,"doSet: MQTT publish failure");
+        		
+        		$json->status = 'error';
+        		$error_1 = new stdClass();
+        		$error_1->reason='mqtt publish failure';
+        		$error_1->message = '';
+        		$json->errors = array();
+        		$json->errors.push($error_1);
+				return false;
+        	}
+    	}
+    	return true;
+	}
 	
     /*
      * Called to set a mqtt value
      */
+	 
+	 // SELECT * FROM `wp_mqttcogs_plugin_data` where topic = 'mysensors_out/10/7/1/0/2' order by utc DESC LIMIT 1 
+	 // mysensors_out/10/255/3/0/32
+	 //
     public function ajaxACTION_doSet() {
-    
+		$this->setupLogging();
     	if (!$this->canUserDoRoleOption('MQTT_WriteAccessRole')) {
     		die();
     	}
     	
-    	global $wpdb;
     	
     	$topic = $_GET['topic'];
     	$qos = (int) $_GET['qos'];
@@ -401,68 +525,49 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     		die();
     	}
     	
-    	$json = new stdClass();
-    	$json->status = 'ok';
-    	
-    	//we now connect to the broker
-    	$mqtt = new MQTT($this->getOption("MQTT_Server"), $atts['id']);
-    		
-    	switch ($this->getOption("MQTT_Version")) {
-    		case "3_1_1":
-    			$mqtt->setVersion(MQTT::VERSION_3_1_1);
-    		default:
-    			$mqtt->setVersion(MQTT::VERSION_3_1 );
-    	}
-    		
-    	$context = stream_context_create();
-    	$mqtt->setSocketContext($context);
-    	
-    	if ($this->getOption("MQTT_Username")) {
-    		$mqtt->setAuth($this->getOption("MQTT_Username"), $this->getOption("MQTT_Password"));
-    	}
-    		
-    	$result = $mqtt->connect();
-    	
-    	if (!($result)) {
-    	    Debug::Log(DEBUG::ERR,"doSet: MQTT can't connect");
-        		$json->status = 'error';
-    		$error_1 = new stdClass();
-    		$error_1->reason='mqtt connection failure';
-    		$error_1->message = '';
-    		$json->errors = array();
-    		$json->errors.push($error_1); 		
-    	}
-    	
-    	else {
-        //	$this->write_log("doSet: MQTT connected");
-        	
-        	
-        	// Don't let IE cache this request
-        	header("Pragma: no-cache");
-        	header("Cache-Control: no-cache, must-revalidate");
-        	header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
-        	header("Content-type: application/json");
-        	
-        	if (!$mqtt->publish_sync($topic, $payload, $qos, $retained)) {
-        	    Debug::Log(DEBUG::ERR,"doSet: MQTT publish failure");
-        		
-        		$json->status = 'error';
-        		$error_1 = new stdClass();
-        		$error_1->reason='mqtt publish failure';
-        		$error_1->message = '';
-        		$json->errors = array();
-        		$json->errors.push($error_1);
-        	}
-    	}
-    	
-    	Debug::Log(DEBUG::INFO,"doSet: MQTT publish success");
-    	$jsonret = json_encode($json);
-       	echo $jsonret;	
-    	die();
+		//if node not online then buffer message
+		
+		$json = new stdClass();	
+		$json->status = 'ok';	
+		
+		if (!$this->isNodeOnline($topic, 'mysensors_out')) {
+			$this->bufferMessage($utc, $topic,$payload,$qos,$retained);
+			
+			$json->status = 'buffered';
+			$jsonret = json_encode($json);
+			wp_send_json($json);
+		}
+		
+	
+		
+		//if here, node is online and message wasn't buffered
+		if ($this->sendMqtt($id, $topic, $payload, $qos, $retained, $json)) {
+			Debug::Log(DEBUG::DEBUG,"doSet: MQTT publish success");			
+		}
+		else {
+			Debug::Log(DEBUG::DEBUG,"doSet: MQTT publish fail");
+			//buffer message
+			$this->bufferMessage($utc, $topic,$payload,$qos,$retained);
+			$json->status = 'buffered';
+		}
+		
+			// Don't let IE cache this request
+		/*header("Pragma: no-cache");
+		header("Cache-Control: no-cache, must-revalidate");
+		header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
+		header("Content-type: application/json");
+		*/
+		wp_send_json($json);
+		/*
+		$jsonret = json_encode($json);
+		echo $jsonret;	
+		die();*/
     }
 	
     	
 	public function ajaxACTION_doGetTopN() {
+		$this->setupLogging();
+		
 		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
 			return '';
 		}
@@ -500,8 +605,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
 	    
-	   echo $jsonret;
-	   die();
+		wp_send_json($jsonret);
+	   
 	}
 	
 	private function replaceWordpressUser($somestring) {
@@ -518,7 +623,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         return $somestring;
 	}
 	
-	public function doSet($atts,$content) {
+	public function shortcodeSet($atts,$content) {
 		
 		if (!$this->canUserDoRoleOption('MQTT_WriteAccessRole')) {
 			return '';
@@ -546,7 +651,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'minrole'=>''
 		], $atts, NULL);
 	
-		$currentvalue = $this->doGet($atts);
+		$currentvalue = $this->shortcodeGet($atts);
 		$id =uniqid();
 		$class = $atts['class'];
 		$topic =  $this->replaceWordpressUser($atts['topic']);
@@ -598,13 +703,19 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					
 					jQuery.get('$url' + document.getElementById('mqttcogs_set_$id').value,function( data ) {
 					
-					    if (data.status == 'ok') {
-    	  					jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
-	  					}
-	  					else {
-	  					    alert('Error!');
-	  					}
-	  					
+					  	switch(data.status) {
+								case 'ok':
+									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+									break;
+								
+								case 'buffered':
+									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+									break;
+								
+								default:
+									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10060').text());
+									break;
+						}
 	  					
 	  					//location.reload();
 						})
@@ -623,7 +734,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		return $script;
 	}
 	
-	public function doGet($atts,$content=NULL) {
+	public function shortcodeGet($atts,$content=NULL) {
 		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
 			return '';
 		}
@@ -661,7 +772,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		return '-'; 
 	}
 	
-	public function doData($atts,$content) {
+	public function shortcodeData($atts,$content) {
 		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
 			return '';
 		}
@@ -686,15 +797,40 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   return $jsonret;		
 	}
 	
+	public function getLastN($table, $topic, $limit) {
+	    global $wpdb;
+	    $table_name = $this->prefixTableName($table);	
+		$topic = $this->replaceWordpressUser($topic);
+		//add the next column definition
+		
+		 $sql = $wpdb->prepare("SELECT `id`, `utc`,`topic`, `payload`, `qos`,`retain` from $table_name
+								WHERE topic LIKE %s 
+								order by utc DESC limit %d",
+								$topic,
+								$limit			
+								);
+		 
+    	 $therows =  $wpdb->get_results(
+    	    	 		$sql, ARRAY_A );
+    	    		    	 
+    	return $therows;
+	}
+	
+	public function deleteBufferById($id) {
+	    global $wpdb;
+	    $table_name = $this->prefixTableName('buffer');	
+		$topic = $this->replaceWordpressUser($topic);
+		//add the next column definition
+		$wpdb->delete( $table_name, array( 'id' => $id ) );
+	}
+	
 	public function getTopN($from, $to, $limit, $topics, $order = 'ASC', $jsonfields='') {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('data');	
 	  
-	    if (is_numeric($from)) {
-	       
+	    if (is_numeric($from)) {      
 	    	$from = time() + floatval($from)*86400;
 	    	$from = date('Y-m-d H:i:s', $from);
-	    
 	    }
 	    
 	    if (is_numeric($to)) {
@@ -765,7 +901,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	  			}
       			}	
     			
-    			 
     		        $json->rows[] =$o;
     	        }
     	      
@@ -871,6 +1006,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	
 	public function ajaxACTION_doSQL() {
+		$this->setupLogging();
+		
 		/*if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
 			return '';
 		}*/
@@ -917,7 +1054,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                 
 	} 
 	
-	public function doDrawGoogle2($atts,$content) {
+	public function shortcodeDrawGoogle2($atts,$content) {
 	 /* wp_enqueue_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));*/
 	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
  
@@ -1007,7 +1144,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	//////
 
-	public function doDrawGoogle($atts,$content) {
+	public function shortcodeDrawGoogle($atts,$content) {
       
  	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
  
@@ -1065,12 +1202,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	      
 	      function handleResponse'.$id.'(response) {
 	    	if (response.isError()) {
-    			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());
-     			return;
-	        }
-
-	   	    var data = response.getDataTable();	 
-	        chart'.$id.'.draw(data, '.$options.');
+    			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());	
+			}
+			else {
+				var data = response.getDataTable();	 
+				chart'.$id.'.draw(data, '.$options.');
+			}
 	        
 	        setTimeout(function () {
 	            query'.$id.'.send(handleResponse'.$id.');
@@ -1085,6 +1222,22 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	function getGoogleLoadJS($charttype) {
 		return 	 'google.charts.load("current", {"packages":["corechart","bar","table","gauge","map"]});';
 
+	}
+	
+	public function startsWith($haystack, $needle)
+	{
+		 $length = strlen($needle);
+		 return (substr($haystack, 0, $length) === $needle);
+	}
+
+	public function endsWith($haystack, $needle)
+	{
+		$length = strlen($needle);
+		if ($length == 0) {
+			return true;
+		}
+
+		return (substr($haystack, -$length) === $needle);
 	}
 }
 
@@ -1105,8 +1258,10 @@ class MySubscribeCallback extends MessageHandler
 		{
 		    $topic = $publish_object->getTopic();
 		    $msg = $publish_object->getMessage();
+			$qos = $publish_object->getQos();
+			$retain = $publish_object->getRetain();
 		    Debug::Log(DEBUG::INFO,
-		    "MqttCogs msg received {$topic}, {$msg}");
+		    "MqttCogs msg received {$topic}, {$msg}, {$qos}, {$retain}");
 		   
 		
 			$tableName = $this->mqttcogs_plugin->prefixTableName('data');
@@ -1119,7 +1274,9 @@ class MySubscribeCallback extends MessageHandler
 					array(
 							'utc' => $utc,
 							'topic' => $publish_object->getTopic(),
-							'payload' => $publish_object->getMessage()
+							'payload' => $publish_object->getMessage(),
+							'qos' =>$publish_object->getQos(),
+							'retain' => $publish_object->getRetain()
 					),
 					array(
 							'%s',
@@ -1134,10 +1291,35 @@ class MySubscribeCallback extends MessageHandler
 								array(
 									$utc,
 									$publish_object->getTopic(),
-									$publish_object->getMessage()
+									$publish_object->getMessage(),
+									$publish_object->getQos(),
+									$publish_object->getRetain()
 								)
 							);
-
+				
+			//is this a node sleep? If yes then get any buffered messages
+			if (!$this->mqttcogs_plugin->endsWith($publish_object->getTopic(), '/255/3/0/32')) {
+				return;
+			}
+			
+			$pieces = explode("/", $publish_object->getTopic());
+			$nodeid = $pieces[1];
+			$subnode = $pieces[2];
+			
+			//node is online so....
+			$therows = $this->mqttcogs_plugin->getLastN('buffer', 'mysensors_in/'.$nodeid.'/%',10);
+			//rows are descending by datetime 
+			$therows = array_reverse($therows);
+			$json = new stdClass();
+			
+			foreach($therows as $row) {
+				if ($this->mqttcogs_plugin->sendMqtt($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], $json)) {
+					$this->mqttcogs_plugin->deleteBufferById($row['id']);
+				}
+				else {
+					break;
+				}
+			}
 		}
 		catch (Exception $e) {
 		        Debug::Log(DEBUG::ERR,$e->getMessage());
