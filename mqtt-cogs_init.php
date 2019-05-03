@@ -50,4 +50,5 @@ function MqttCogs_init($file) {
 
     // Register the Plugin Deactivation Hook
     register_deactivation_hook($file, array(&$aPlugin, 'deactivate'));
+	
 }

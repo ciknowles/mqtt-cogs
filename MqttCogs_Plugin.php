@@ -18,12 +18,6 @@ use \flock\Lock;
 class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
     public $mqtt;
-
-/*
-	function __construct() {
-		
-		
-	}*/
 		
     //called when the plugin is activated
     public function activate() {
@@ -64,26 +58,26 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			
     	$readroles = array_merge(array(__('MQTT Read Role', 'mqttcogs')),  $arr);
 
-    	$writeroles = array('Contributor') +  $arr;
-    //	$this->write_log(var_dump($arr));
-    	
+    	$writeroles = array('Contributor') +  $arr;    	
     	$writeroles = array_merge(array(__('MQTT Write Role', 'mqttcogs')), $arr);
     	
         return array(
             //'_version' => array('Installed Version'), // Leave this one commented-out. Uncomment to test upgrades.
             
         	'MQTT_Version' => array(__('MQTT Version', 'mqttcogs'), "3_1_1", "3_1"),
-        	'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs')),
-			'MQTT_ClientID' => array(__('MQTT ClientID', 'mqttcogs')),
-			'MQTT_Username' => array(__('MQTT User', 'mqttcogs')),
-			'MQTT_Password' => array(__('MQTT Password', 'mqttcogs')),
+        	'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs'), "tcp://yourmqttbrokeraddress"),
+			'MQTT_ClientID' => array(__('MQTT ClientID', 'mqttcogs'), "mqttcogs"),
+			'MQTT_Username' => array(__('MQTT User', 'mqttcogs'), "yourmqttusername"),
+			'MQTT_Password' => array(__('MQTT Password', 'mqttcogs'), "yourmqttpassword"),
+			'MQTT_TopicFilter' => array(__('MQTT TopicFilter', 'mqttcogs'), "#"),
 			
-			'MQTT_TopicFilter' => array(__('MQTT TopicFilter', 'mqttcogs')),
-			
+			'MQTT_MySensorsRxTopic' => array(__('MySensors Receive Topic (msgs from nodes)', 'mysensors_out')),
+			'MQTT_MySensorsTxTopic' => array(__('MySensors Transmit Topic (msgs to nodes)', 'mysensors_in')),
+									
 			'MQTT_KeepArchive' => array(__('Save MQTT data for', 'mqttcogs'),
 					'Forever', '365 Days', '165 Days', '30 Days', '7 Days', '1 Day'),
                                 
-            'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs')),
+            'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs'),298),
             
             'MQTT_Debug' => array(__('MQTT Debug', 'mqttcogs'), 'All', 'Info', 'None'),
         		      	
@@ -430,9 +424,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$rows = $this->getLastN('data', $key.'/'.$nodeid.'/'.$sensor.'/255/3/0/32', 1);
 		if (count($rows)==1) {
-			//$rows[0]['utc']
-			//are we within the window?
-			return false;
+			$utcunixdate = strtotime($rows[0]['utc']);
+			$stayalive = intval($rows[0]['utc']);
+			return (($time()>=$utcunixdate) && ($time()<$utcunixdate + $stayalive));
 		}			
 		return false;
 	}
@@ -530,7 +524,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$json = new stdClass();	
 		$json->status = 'ok';	
 		
-		if (!$this->isNodeOnline($topic, 'mysensors_out')) {
+		if (!$this->isNodeOnline($topic, $this->getOption('MQTT_MySensorsRxTopic', 'mysensors_out'))) {
 			$this->bufferMessage($utc, $topic,$payload,$qos,$retained);
 			
 			$json->status = 'buffered';
@@ -551,17 +545,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			$json->status = 'buffered';
 		}
 		
-			// Don't let IE cache this request
-		/*header("Pragma: no-cache");
-		header("Cache-Control: no-cache, must-revalidate");
-		header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
-		header("Content-type: application/json");
-		*/
 		wp_send_json($json);
-		/*
-		$jsonret = json_encode($json);
-		echo $jsonret;	
-		die();*/
     }
 	
     	
@@ -1307,7 +1291,9 @@ class MySubscribeCallback extends MessageHandler
 			$subnode = $pieces[2];
 			
 			//node is online so....
-			$therows = $this->mqttcogs_plugin->getLastN('buffer', 'mysensors_in/'.$nodeid.'/%',10);
+			$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
+			$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10);
+			
 			//rows are descending by datetime 
 			$therows = array_reverse($therows);
 			$json = new stdClass();
