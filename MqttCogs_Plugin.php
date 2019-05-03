@@ -65,20 +65,19 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             //'_version' => array('Installed Version'), // Leave this one commented-out. Uncomment to test upgrades.
             
         	'MQTT_Version' => array(__('MQTT Version', 'mqttcogs'), "3_1_1", "3_1"),
-        	'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs'), "tcp://yourmqttbrokeraddress"),
-			'MQTT_ClientID' => array(__('MQTT ClientID', 'mqttcogs'), "mqttcogs"),
-			'MQTT_Username' => array(__('MQTT User', 'mqttcogs'), "yourmqttusername"),
-			'MQTT_Password' => array(__('MQTT Password', 'mqttcogs'), "yourmqttpassword"),
-			'MQTT_TopicFilter' => array(__('MQTT TopicFilter', 'mqttcogs'), "#"),
+        	'MQTT_Server' => array(__('MQTT Server/Port', 'mqttcogs')),
+			'MQTT_ClientID' => array(__('MQTT ClientID', 'mqttcogs')),
+			'MQTT_Username' => array(__('MQTT User', 'mqttcogs')),
+			'MQTT_Password' => array(__('MQTT Password', 'mqttcogs')),
+			'MQTT_TopicFilter' => array(__('MQTT TopicFilter', 'mqttcogs')),
 			
-			'MQTT_MySensorsRxTopic' => array(__('MySensors Receive Topic (msgs from nodes)', 'mysensors_out')),
-			'MQTT_MySensorsTxTopic' => array(__('MySensors Transmit Topic (msgs to nodes)', 'mysensors_in')),
+			'MQTT_MySensorsRxTopic' => array(__('MySensors Receive Topic (msgs from nodes)','mqttcogs')),
+			'MQTT_MySensorsTxTopic' => array(__('MySensors Transmit Topic (msgs to nodes)', 'mqttcogs')),
 									
 			'MQTT_KeepArchive' => array(__('Save MQTT data for', 'mqttcogs'),
 					'Forever', '365 Days', '165 Days', '30 Days', '7 Days', '1 Day'),
                                 
-            'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs'),298),
-            
+            'MQTT_Recycle' => array(__('MQTT Connection Recycle (secs)', 'mqttcogs')),
             'MQTT_Debug' => array(__('MQTT Debug', 'mqttcogs'), 'All', 'Info', 'None'),
         		      	
         	'MQTT_ReadAccessRole' => $readroles,
@@ -803,7 +802,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	public function deleteBufferById($id) {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('buffer');	
-		$topic = $this->replaceWordpressUser($topic);
+		//$topic = $this->replaceWordpressUser($topic);
 		//add the next column definition
 		$wpdb->delete( $table_name, array( 'id' => $id ) );
 	}
@@ -1252,6 +1251,31 @@ class MySubscribeCallback extends MessageHandler
 			$utc = current_time( 'mysql', true );
 		
 			$publish_object = apply_filters('mqttcogs_msg_in_pre',$publish_object, $utc);
+			
+			if ($this->mqttcogs_plugin->endsWith($publish_object->getTopic(), '/255/3/0/32')) {				
+				$pieces = explode("/", $publish_object->getTopic());
+				$nodeid = $pieces[1];
+				$subnode = $pieces[2];
+				
+				//node is online so....
+				$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
+				$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10);
+				
+				//rows are descending by datetime 
+				$therows = array_reverse($therows);
+				$json = new stdClass();
+				
+				foreach($therows as $row) {
+					if ($this->mqttcogs_plugin->sendMqtt($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], $json)) {
+						$this->mqttcogs_plugin->deleteBufferById($row['id']);
+					}
+					else {
+						break;
+					}
+				}
+			}
+
+			
 		
 			$wpdb->insert(
 					$tableName,
@@ -1268,6 +1292,7 @@ class MySubscribeCallback extends MessageHandler
 							'%s'
 					)
 					);
+			
 			$publish_object = apply_filters('mqttcogs_msg_in',$publish_object, $utc);
 			
 			do_action_ref_array(
@@ -1282,30 +1307,7 @@ class MySubscribeCallback extends MessageHandler
 							);
 				
 			//is this a node sleep? If yes then get any buffered messages
-			if (!$this->mqttcogs_plugin->endsWith($publish_object->getTopic(), '/255/3/0/32')) {
-				return;
-			}
 			
-			$pieces = explode("/", $publish_object->getTopic());
-			$nodeid = $pieces[1];
-			$subnode = $pieces[2];
-			
-			//node is online so....
-			$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
-			$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10);
-			
-			//rows are descending by datetime 
-			$therows = array_reverse($therows);
-			$json = new stdClass();
-			
-			foreach($therows as $row) {
-				if ($this->mqttcogs_plugin->sendMqtt($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], $json)) {
-					$this->mqttcogs_plugin->deleteBufferById($row['id']);
-				}
-				else {
-					break;
-				}
-			}
 		}
 		catch (Exception $e) {
 		        Debug::Log(DEBUG::ERR,$e->getMessage());
