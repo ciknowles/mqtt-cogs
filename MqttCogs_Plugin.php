@@ -241,8 +241,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	 add_shortcode('mqttcogs_get', array($this, 'shortcodeGet'));
     	 add_shortcode('mqttcogs_set', array($this, 'shortcodeSet'));
 	 
-		//add_action( 'init', array($this, 'setupLogging'));
-		 
+				 
         // Register AJAX hooks
         // http://plugin.michael-simpson.com/?page_id=41
     	add_action('wp_ajax_doGetTopN', array(&$this, 'ajaxACTION_doGetTopN'));
@@ -421,7 +420,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$ack = $pieces[4];
 		$type = $pieces[5];
 		
-		$rows = $this->getLastN('data', $key.'/'.$nodeid.'/'.$sensor.'/255/3/0/32', 1);
+		$rows = $this->getLastN('data', $key.'/'.$nodeid.'/'.$sensor.'/255/3/0/32', 1, 'DESC');
 		if (count($rows)==1) {
 			$utcunixdate = strtotime($rows[0]['utc']);
 			$stayalive = intval($rows[0]['utc']);
@@ -453,8 +452,21 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			);
 	}
 	
-	public function sendMqtt($id, $topic, $payload, $qos, $retained, $json) {
-	//if online send to broker
+	public function sendMqtt($id, $topic, $payload, $qos, $retained, $result) {
+		return $this->sendMqttInternal($id, $topic, $payload, $qos, $retained, true, $result);
+	}
+	
+	public function sendMqttInternal($id, $topic, $payload, $qos, $retained, $trybuffer, $result) {
+	
+		if ($trybuffer) {
+			if (!$this->isNodeOnline($topic, $this->getOption('MQTT_MySensorsRxTopic', 'mysensors_out'))) {
+				$this->bufferMessage($utc, $topic,$payload,$qos,$retained);	
+				$json->status = 'buffered';
+				return true;
+			}
+		}
+		
+	    //if online send to broker
     	$mqtt = $this->buildMQTTClient($id);
     	    		
     	$result = $mqtt->connect();
@@ -522,26 +534,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$json = new stdClass();	
 		$json->status = 'ok';	
-		
-		if (!$this->isNodeOnline($topic, $this->getOption('MQTT_MySensorsRxTopic', 'mysensors_out'))) {
-			$this->bufferMessage($utc, $topic,$payload,$qos,$retained);
-			
-			$json->status = 'buffered';
-			$jsonret = json_encode($json);
-			wp_send_json($json);
-		}
-		
-	
-		
-		//if here, node is online and message wasn't buffered
-		if ($this->sendMqtt($id, $topic, $payload, $qos, $retained, $json)) {
+				
+		//if here
+		if ($this->sendMqttInternal($id, $topic, $payload, $qos, $retained, true, $json)) {
 			Debug::Log(DEBUG::DEBUG,"doSet: MQTT publish success");			
-		}
-		else {
-			Debug::Log(DEBUG::DEBUG,"doSet: MQTT publish fail");
-			//buffer message
-			$this->bufferMessage($utc, $topic,$payload,$qos,$retained);
-			$json->status = 'buffered';
 		}
 		
 		wp_send_json($json);
@@ -780,22 +776,24 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   return $jsonret;		
 	}
 	
-	public function getLastN($table, $topic, $limit) {
+	public function getLastN($table, $topic, $limit, $order) {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName($table);	
 		$topic = $this->replaceWordpressUser($topic);
 		//add the next column definition
 		
-		 $sql = $wpdb->prepare("SELECT `id`, `utc`,`topic`, `payload`, `qos`,`retain` from $table_name
+		$sql = $wpdb->prepare("SELECT `id`, `utc`,`topic`, `payload`, `qos`,`retain` from $table_name
 								WHERE topic LIKE %s 
-								order by utc DESC limit %d",
+								order by utc $order limit %d",
 								$topic,
 								$limit			
 								);
 		 
-    	 $therows =  $wpdb->get_results(
+    	$therows =  $wpdb->get_results(
     	    	 		$sql, ARRAY_A );
-    	    		    	 
+    	
+		$therows = apply_filters('mqttcogs_shortcode_pre',$therows,$topic);
+		
     	return $therows;
 	}
 	
@@ -843,8 +841,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    foreach($topics as $topic) {
     	    	
     	    	$topic = $this->replaceWordpressUser($topic);
-    	    	//add the next column definition
-    	    	$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');		    	
     	    	
     	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
     	    	 						WHERE topic=%s 
@@ -861,8 +857,14 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 
     	    	 $therows =  $wpdb->get_results(
     	    	 		$sql		, ARRAY_A );
-    	    		    	 
+    	    	
+			$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
+
+			
+			$colset = false;
+			
     	  	foreach($therows as $row) {
+								
     	  		$o = new stdClass();
     			$o->c = array();
     		        $o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
@@ -872,11 +874,22 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	  		for($i = 0; $i < count($topics); ++$i){
     	  			
     	  			if ($i==$index) {
+						if (!$colset) {
+							if (is_numeric($row['payload'])) {
+								//add the next column definition
+								$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');	
+							}
+							else {
+								//add the next column definition
+								$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"string"}');	
+							}
+							$colset = true;
+						}
     	  				if (is_numeric($row['payload'])) {
     		  				$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
     	  				}
     	  				else {
-    		  				$o->c[] = json_decode('{"v":"'.$row['payload'].'"}');   
+    		  				$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
     	  				}
     	  			}
     	  			else {
@@ -927,6 +940,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         	    	 
         	    	 $therows =  $wpdb->get_results(
         	    	 		$sql		, ARRAY_A );
+					$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
         	    		    	 
         	    try
         	    {
@@ -1248,25 +1262,36 @@ class MySubscribeCallback extends MessageHandler
 		   
 		
 			$tableName = $this->mqttcogs_plugin->prefixTableName('data');
-			$utc = current_time( 'mysql', true );
-		
-			$publish_object = apply_filters('mqttcogs_msg_in_pre',$publish_object, $utc);
 			
+			$datetime = new DateTime(); //current_time( 'mysql', true );
+			
+			$publish_object = apply_filters('mqttcogs_msg_in_pre',$publish_object ,$datetime);
+			
+			if (!isset($publish_object)) {
+				return;
+			}
+
+			$utc = date_format($datetime, 'Y-m-d H:i:s');
+ 			
+			//deal with smartsleep nodes
 			if ($this->mqttcogs_plugin->endsWith($publish_object->getTopic(), '/255/3/0/32')) {				
 				$pieces = explode("/", $publish_object->getTopic());
 				$nodeid = $pieces[1];
 				$subnode = $pieces[2];
 				
 				//node is online so....
+				//TO DO BETTER CHECK HERE
+					
+				
 				$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
-				$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10);
+				$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10, 'ASC');
 				
 				//rows are descending by datetime 
-				$therows = array_reverse($therows);
+				//$therows = array_reverse($therows);
 				$json = new stdClass();
 				
 				foreach($therows as $row) {
-					if ($this->mqttcogs_plugin->sendMqtt($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], $json)) {
+					if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
 						$this->mqttcogs_plugin->deleteBufferById($row['id']);
 					}
 					else {
@@ -1292,8 +1317,11 @@ class MySubscribeCallback extends MessageHandler
 							'%s'
 					)
 					);
+			/*$publish_object = apply_filters('mqttcogs_msg_in_pre',$publish_object ,$utc);
 			
-			$publish_object = apply_filters('mqttcogs_msg_in',$publish_object, $utc);
+			if (!isset($publish_object)) {
+				return;
+			}*/
 			
 			do_action_ref_array(
 								'after_mqttcogs_msg_in',

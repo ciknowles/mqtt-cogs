@@ -338,7 +338,7 @@ class MQTT
             }
         } while (true);
 
-        Debug::Log(Debug::INFO, 'connect(): Connection established.');
+        Debug::Log(Debug::DEBUG, 'connect(): Connection established.');
 
         $this->socket->set_blocking();
 
@@ -381,7 +381,7 @@ class MQTT
 
         $connackobj = $this->message_read();
 
-        Debug::Log(Debug::INFO, 'connect(): connected=' . ($connackobj->getMessageType() == Message::CONNACK ? 1 : 0));
+        Debug::Log(Debug::DEBUG, 'connect(): connected=' . ($connackobj->getMessageType() == Message::CONNACK ? 1 : 0));
 
         # save current time for ping
         $this->connected_time = time();
@@ -399,7 +399,7 @@ class MQTT
      */
     public function disconnect()
     {
-        Debug::Log(Debug::INFO, 'disconnect()');
+        Debug::Log(Debug::DEBUG, 'disconnect()');
 
         $this->simpleCommand(Message::DISCONNECT);
 
@@ -423,7 +423,7 @@ class MQTT
      */
     public function reconnect($close_current=true)
     {
-        Debug::Log(Debug::INFO, 'reconnect()');
+        Debug::Log(Debug::DEBUG, 'reconnect()');
         if ($close_current) {
             Debug::Log(Debug::DEBUG, 'reconnect(): close current');
             $this->disconnect();
@@ -551,7 +551,7 @@ class MQTT
             }
         }
 
-        Debug::Log(Debug::INFO, "publish() QoS={$qos}, MsgID={$msgid}, DUP={$dup}");
+        Debug::Log(Debug::NOTICE, "publish() QoS={$qos}, MsgID={$msgid}, DUP={$dup}");
         /**
          * @var Message\PUBLISH $publishobj
          */
@@ -801,7 +801,7 @@ class MQTT
         switch ($message_object->getMessageType()) {
         case Message::PINGRESP:
             array_shift($this->ping_queue);
-            Debug::Log(Debug::INFO, 'loop(): received PINGRESP');
+            Debug::Log(Debug::DEBUG, 'loop(): received PINGRESP');
 
             $this->last_ping_time = time();
 
@@ -816,7 +816,7 @@ class MQTT
              * @var Message\PUBLISH $message_object
              */
 
-            Debug::Log(Debug::INFO, 'loop(): received PUBLISH');
+            Debug::Log(Debug::DEBUG, 'loop(): received PUBLISH');
 
             $qos    = $message_object->getQoS();
 
@@ -866,7 +866,7 @@ class MQTT
             # Message has been published (QoS 1)
 
             $msgid = $message_object->getMsgID();
-            Debug::Log(Debug::INFO, 'loop(): received PUBACK msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): received PUBACK msgid=' . $msgid);
             # Verify Packet Identifier
             $this->call_handler('puback', array($this, $message_object));
 
@@ -881,12 +881,12 @@ class MQTT
              */
 
             $msgid = $message_object->getMsgID();
-            Debug::Log(Debug::INFO, 'loop(): received PUBREC msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): received PUBREC msgid=' . $msgid);
 
             $this->cmdstore->delWait(Message::PUBREC, $msgid);
 
             # PUBREL
-            Debug::Log(Debug::INFO, 'loop(): send PUBREL msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): send PUBREL msgid=' . $msgid);
             $pubrel_bytes_written = $this->simpleCommand(Message::PUBREL, $msgid);
 
 
@@ -913,12 +913,12 @@ class MQTT
              */
 
             $msgid = $message_object->getMsgID();
-            Debug::Log(Debug::INFO, 'loop(): received PUBREL msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): received PUBREL msgid=' . $msgid);
 
             $this->cmdstore->delWait(Message::PUBREL, $msgid);
 
             # PUBCOMP
-            Debug::Log(Debug::INFO, 'loop(): send PUBCOMP msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): send PUBCOMP msgid=' . $msgid);
             $pubcomp_bytes_written = $this->simpleCommand(Message::PUBCOMP, $msgid);
 
             Debug::Log(Debug::DEBUG, 'loop(): PUBREL QoS=2 PUBCOMP written=' . $pubcomp_bytes_written);
@@ -937,7 +937,7 @@ class MQTT
              */
 
             $msgid = $message_object->getMsgID();
-            Debug::Log(Debug::INFO, 'loop(): received PUBCOMP msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): received PUBCOMP msgid=' . $msgid);
 
             $this->cmdstore->delWait(Message::PUBCOMP, $msgid);
 
@@ -953,7 +953,7 @@ class MQTT
 
             $return_codes = $message_object->getReturnCodes();
             $msgid = $message_object->getMsgID();
-            Debug::Log(Debug::INFO, 'loop(): received SUBACK msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): received SUBACK msgid=' . $msgid);
 
             if (!isset($this->subscribe_awaits[$msgid])) {
                 Debug::Log(Debug::WARN, 'loop(): SUBACK Message identifier not found: ' . $msgid);
@@ -986,7 +986,7 @@ class MQTT
              */
 
             $msgid = $message_object->getMsgID();
-            Debug::Log(Debug::INFO, 'loop(): received UNSUBACK msgid=' . $msgid);
+            Debug::Log(Debug::DEBUG, 'loop(): received UNSUBACK msgid=' . $msgid);
 
             if (!isset($this->unsubscribe_awaits[$msgid])) {
                 Debug::Log(Debug::WARN, 'loop(): UNSUBACK Message identifier not found ' . $msgid);
@@ -1063,7 +1063,7 @@ class MQTT
                 $wait = $this->cmdstore->getWait(Message::PUBREC, $msgid);
                 if (empty($wait['retry_after']) || $wait['retry_after'] < $time) {
                     # resend PUBREC
-                    Debug::Log(Debug::INFO, 'Resend PUBREC msgid=' . $msgid);
+                    Debug::Log(Debug::DEBUG, 'Resend PUBREC msgid=' . $msgid);
                     $this->simpleCommand(Message::PUBREC, $msgid);
                 }
             }
@@ -1074,7 +1074,7 @@ class MQTT
                 $wait = $this->cmdstore->getWait(Message::PUBCOMP, $msgid);
                 if (empty($wait['retry_after']) || $wait['retry_after'] < $time) {
                     # resend PUBREL
-                    Debug::Log(Debug::INFO, 'Resend PUBREL msgid=' . $msgid);
+                    Debug::Log(Debug::DEBUG, 'Resend PUBREL msgid=' . $msgid);
                     $this->simpleCommand(Message::PUBREL, $msgid);
                 }
             }
@@ -1113,7 +1113,7 @@ class MQTT
        // while (true) {
             # check if any commands awaits or topics to subscribe
             if (!$this->cmdstore->countWaits() && empty($this->topics) && empty($this->topics_to_subscribe)) {
-                Debug::Log(Debug::INFO, "loop(): No tasks, leaving...");
+                Debug::Log(Debug::DEBUG, "loop(): No tasks, leaving...");
                 return true;
             }
 
@@ -1137,7 +1137,7 @@ class MQTT
                 $this->handle_message();
 
             } catch (Exception\NetworkError $e) {
-                Debug::Log(Debug::INFO, 'loop(): Connection lost.');
+                Debug::Log(Debug::NOTICE, 'loop(): Connection lost.');
                 $this->reconnect();
                 $this->subscribe($this->topics);
             } catch (\Exception $e) {
@@ -1191,7 +1191,7 @@ class MQTT
      */
     public function ping()
     {
-        Debug::Log(Debug::INFO, 'ping()');
+        Debug::Log(Debug::DEBUG, 'ping()');
         # parse error?
         $ret = $this->simpleCommand(Message::PINGREQ);
         if (!$ret) {

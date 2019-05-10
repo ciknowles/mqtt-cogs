@@ -121,8 +121,8 @@ class MqttCogs_LifeCycle extends MqttCogs_InstallIndicator {
      * @return void
      */
     public function addSettingsSubMenuPage() {
-        $this->addSettingsSubMenuPageToPluginsMenu();
-        //$this->addSettingsSubMenuPageToSettingsMenu();
+        //$this->addSettingsSubMenuPageToPluginsMenu();
+        $this->addSettingsSubMenuPageToSettingsMenu();
     }
 
 
