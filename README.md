@@ -21,17 +21,18 @@ I’ve been mucking around with IoT (internet of things) projects for over a yea
 
 I didn’t want to rent a server and then have to install IOT Controller software. What I do have though is a wordpress blog. This costs me $1.50 per month to rent. So I started wondering about getting MQTT data into the WordPress database and visualizing the data on my blog.
 
+## Demo & Documentation
+
+http://mqttcogs.sailresults.org/
+
 ## Installation
 
-[TO DO]
+http://mqttcogs.sailresults.org/get-started-with-mqttcogs/
+
 
 ## Shortcode Reference
 
 http://mqttcogs.sailresults.org/shortcodes/
-
-## Tests
-
-There are no tests.
 
 ## Contributors
 
