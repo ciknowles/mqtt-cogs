@@ -34,6 +34,10 @@ http://mqttcogs.sailresults.org/get-started-with-mqttcogs/
 
 http://mqttcogs.sailresults.org/shortcodes/
 
+## Hook Reference
+
+http://mqttcogs.sailresults.org/hooks/
+
 ## Contributors
 
 Me at the moment but let me know if you want to help out. See http://mqttcogs.sailresults.org/about/ for contact information
