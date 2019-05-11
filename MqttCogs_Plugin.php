@@ -98,7 +98,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     }
     
 	public function setupLogging() {
-		error_log("setupLogging");	
+		//error_log("setupLogging");	
 		switch($this->getOption("MQTT_Debug", "Info")) {
         		    case "All":
         		      
