@@ -578,14 +578,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
 	 
 	    header("Content-type: application/json");
-	 
+	    
+	    //$jsonret = json_encode($json);
 	   $jsonret = 'google.visualization.Query.setResponse('.json_encode($json).');';
 	   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
-	    
-		wp_send_json($jsonret);
-	   
+	    echo $jsonret;
+	    die();
+		//wp_send_json($jsonret);
 	}
 	
 	private function replaceWordpressUser($somestring) {
@@ -1142,7 +1143,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	//////
 
 	public function shortcodeDrawGoogle($atts,$content) {
-      
+      $this->setupLogging();
+		
+	
  	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
  
 	  $atts = shortcode_atts([
@@ -1151,14 +1154,16 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					            'refresh_secs'=>60
 	                       ], $atts, NULL);
 	
+		
 	$id = uniqid();
 	$ajax = ($atts['refresh_secs'] > 0);
 	
+	// Debug::Log(DEBUG::INFO, "shortcodeDrawGoogle {$atts['ajax']}");
     $options = $atts["options"];
     $charttype = $atts["charttype"];
    
 	$refresh_secs = $atts["refresh_secs"];
-	if (!$atts["ajax"]) {
+	if (!$ajax) {
 		$script = '
 	 <div id="'.$id.'">
 	 <script type="text/javascript">
