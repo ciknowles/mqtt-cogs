@@ -259,14 +259,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.96');
 		
-		wp_register_script('chartdrawer', plugins_url('/js/chartdrawer.js', __FILE__), array('google.loadecharts', 'loadgoogle'));
+		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
+		wp_register_script('leaflet', '	https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
+	
 		
-		wp_enqueue_script('google_loadecharts');
-		wp_enqueue_script('loadgoogle');
 		
-		
-		//https://unpkg.com/leaflet@1.5.1/dist/leaflet.css
 	}
 
     //prunes the mqttcogs database table. Run daily
@@ -1153,8 +1152,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	public function shortcodeDrawLeaflet($atts, $content) {
 		$this->setupLogging();
+		 //only include google stuff for this shortcode
+	    wp_enqueue_style('leafletcss');
+	    wp_enqueue_script('leaflet');
+			
+		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
 		$id = uniqid();
+		
+		
 		
 		return '<div id="'.$id.'">';
 	}
@@ -1163,11 +1169,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
 	public function shortcodeDrawGoogle($atts,$content) {
       $this->setupLogging();
-		
+	
+	  static $graphs = array();	
 	 
 	  //only include google stuff for this shortcode
-	  //wp_enqueue_script('google_loadecharts');
-	  //wp_enqueue_script('loadgoogle');
+	  wp_enqueue_script('google_loadecharts');
+	  wp_enqueue_script('loadgoogle');
 			
 	  
 	
@@ -1176,39 +1183,21 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  $atts = shortcode_atts([
 	                           'charttype' => 'LineChart',
 	                            'options' => '{"width":400,"height":300}',
-					            'refresh_secs'=>60
+					            'refresh_secs'=>0
 	                       ], $atts, NULL);
 	
 		
 	$id = uniqid();
-	$ajax = ($atts['refresh_secs'] > 0);
+//	$ajax = ($atts['refresh_secs'] > 0);
 	
-	// Debug::Log(DEBUG::INFO, "shortcodeDrawGoogle {$atts['ajax']}");
     $options = $atts["options"];
     $charttype = $atts["charttype"];
-   
 	$refresh_secs = $atts["refresh_secs"];
 	
-	wp_localize_script( 'chartdrawer', 'ajax_params', array( 'ajax_url' => admin_url( 'admin-ajax.php' ) ) );
-	wp_enqueue_script('chartdrawer');	
-	 
-	if (!$ajax) {
-		$script = '
-	 <div id="'.$id.'">
-	 <script type="text/javascript">
-	      google.charts.setOnLoadCallback(drawChart'.$id.');
-	      
-	      function drawChart'.$id.'() {
-	      var data = new google.visualization.DataTable('.strip_tags(do_shortcode($content)).');	
-		
-	        var chart = new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
-	        chart.draw(data, '.$options.');      
-	      }
-	    </script></div>';
-        return $script;
-	}
-	else {
-
+  	wp_enqueue_script('chartdrawer');
+  	
+  	global $wp_scripts;
+ 
 	$content = str_replace('mqttcogs_', 'mqttcogs_ajax_', $content);
 	$content= strip_tags($content);
 	$conent = trim($content);
@@ -1218,36 +1207,19 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	$querystring =  str_replace(array("\r", "\n"), '', $content);
 
 	$script = '
-	 <div id="'.$id.'">
-	 <script type="text/javascript">
-	      google.charts.setOnLoadCallback(drawChart'.$id.');
-	        
-	      var chart'.$id.';
-	      var query'.$id.';
-	      function drawChart'.$id.'() {
-	          chart'.$id.'= new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
-
-		      query'.$id.' = new google.visualization.Query("'.$querystring.'");
-		      query'.$id.'.send(handleResponse'.$id.');
-	      }
-	      
-	      function handleResponse'.$id.'(response) {
-	    	if (response.isError()) {
-    			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());	
-			}
-			else {
-				var data = response.getDataTable();	 
-				chart'.$id.'.draw(data, '.$options.');
-			}
-	        
-	        setTimeout(function () {
-	            query'.$id.'.send(handleResponse'.$id.');
-	        },'.$refresh_secs.'*1000);
-	      }
-	    </script></div>';
+	 <div id="'.$id.'"></div>';
+	 
+	      $graphs[] = array(
+  	     "id"=>$id,
+  	     "refresh_secs"=>$refresh_secs,
+  	     "options"=> $options,
+  	     "charttype"=>$charttype,
+  	     "querystring"=>$querystring
+  	    );
+  	    
+        $wp_scripts->add_data('chartdrawer', 'data', '');
+    	wp_localize_script( 'chartdrawer', 'allcharts', $graphs );
     	return $script;	
-	
-	}
 	}
 
 	function getGoogleLoadJS($charttype) {
