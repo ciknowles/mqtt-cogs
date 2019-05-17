@@ -256,8 +256,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
    	}
    	   	 
 	public function enqueueStylesAndScripts() {
-		wp_enqueue_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
-		wp_enqueue_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
+		
+		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
+		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
+		
+		wp_register_script('chartdrawer', plugins_url('/js/chartdrawer.js', __FILE__), array('google.loadecharts', 'loadgoogle'));
+		
+		wp_enqueue_script('google_loadecharts');
+		wp_enqueue_script('loadgoogle');
+		
+		
+		//https://unpkg.com/leaflet@1.5.1/dist/leaflet.css
 	}
 
     //prunes the mqttcogs database table. Run daily
@@ -276,22 +285,25 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		//DATEDIFF(d1,d2) -- value in days				
 	    $table_name = $this->prefixTableName('data');
-		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
-	//$this->write_log($sql);			
-	    Debug::Log(DEBUG::INFO, 'Pruning MqttCogs database table');
+		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";	
+	    Debug::Log(DEBUG::DEBUG, 'Pruning MqttCogs database table');
 		$wpdb->query($sql);										
 		
-		/*$table_name = $this->prefixTableName('buffer');
+		$table_name = $this->prefixTableName('buffer');
 		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
-	//$this->write_log($sql);			
-	    Debug::Log(DEBUG::INFO, 'Pruning MqttCogs buffer table');
-		$wpdb->query($sql);										*/
+	    Debug::Log(DEBUG::DEBUG, 'Pruning MqttCogs buffer table');
+		$wpdb->query($sql);										
 	}    
 
     //
 	function do_mqtt_watchdog() {
 		
 	try {
+		//if no clientid just return
+		if (empty($this->getOption("MQTT_ClientID"))) {
+			return;
+		}
+		
 		$this->setupLogging();
 		$file = './mqttcogs_lock.pid';
 		$lock = new flock\Lock($file);
@@ -1139,12 +1151,25 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	return $script;	
 	}
 	
+	public function shortcodeDrawLeaflet($atts, $content) {
+		$this->setupLogging();
+		$atts = array_change_key_case((array)$atts, CASE_LOWER);
+		$id = uniqid();
+		
+		return '<div id="'.$id.'">';
+	}
 	
 	//////
 
 	public function shortcodeDrawGoogle($atts,$content) {
       $this->setupLogging();
 		
+	 
+	  //only include google stuff for this shortcode
+	  //wp_enqueue_script('google_loadecharts');
+	  //wp_enqueue_script('loadgoogle');
+			
+	  
 	
  	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
  
@@ -1163,6 +1188,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     $charttype = $atts["charttype"];
    
 	$refresh_secs = $atts["refresh_secs"];
+	
+	wp_localize_script( 'chartdrawer', 'ajax_params', array( 'ajax_url' => admin_url( 'admin-ajax.php' ) ) );
+	wp_enqueue_script('chartdrawer');	
+	 
 	if (!$ajax) {
 		$script = '
 	 <div id="'.$id.'">
