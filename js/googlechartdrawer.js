@@ -5,29 +5,34 @@ if (allcharts && allcharts.length>0) {
         //chart/query/
         var self = this;
         var chartinfo = self.allcharts[i];
-        google.charts.setOnLoadCallback(function () {
-            
-            chartinfo.chart = new google.visualization[chartinfo.charttype](document.getElementById(chartinfo.id));    
-            chartinfo.query = new google.visualization.Query(chartinfo.querystring);
-        
-            chartinfo.responsehandler = function (response) {
-                    	if (response.isError()) {
-                			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());	
-            			}
-            			else {
-            				var data = response.getDataTable();	 
-            				chartinfo.chart.draw(data, eval('('+chartinfo.options+')'));
-            			}
-            	        
-            	        if (parseInt(chartinfo.refresh_secs)>0) {
-                	        setTimeout(function () {
-                	            chartinfo.query.send(chartinfo.responsehandler);
-                	        },parseInt(chartinfo.refresh_secs)*1000);
-            	        }
-                };
-        
-            chartinfo.query.send(chartinfo.responsehandler);
-        });
+		
+		chartinfo.responseHandler = function (response) {
+		    var self = this;
+                	if (response.isError()) {
+            			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());	
+        			}
+        			else {
+        				var data = response.getDataTable();	 
+        				self.chart.draw(data, eval('('+self.options+')'));
+        			}
+        	        
+        	        if (parseInt(self.refresh_secs)>0) {
+            	        setTimeout(function () {
+            	            self.query.send(self.responseHandler.bind(self));
+            	        },parseInt(self.refresh_secs)*1000);
+        	        }
+            };
+    
+		chartinfo.onLoadCallback = function () {
+		    var self = this;
+            self.chart = new google.visualization[self.charttype](document.getElementById(self.id));    
+            self.query = new google.visualization.Query(self.querystring);
+       
+            self.query.send(self.responseHandler.bind(self));
+        };
+		
+	
+        google.charts.setOnLoadCallback(chartinfo.onLoadCallback.bind(chartinfo));
     }
 }
     

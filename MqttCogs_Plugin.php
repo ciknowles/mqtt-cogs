@@ -232,7 +232,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         // http://plugin.michael-simpson.com/?page_id=39
 	 
     	 add_shortcode('mqttcogs_drawgoogle', array($this, 'shortcodeDrawGoogle'));
-    	 add_shortcode('mqttcogs_graph', array($this, 'shortcodeDrawGoogle2'));
+    	 
+		 //this is not completed yet
+		 add_shortcode('mqttcogs_drawleaflet', array($this, 'shortcodeDrawLeaflet'));
+			 
+		 //this is experimental
+		 add_shortcode('mqttcogs_graph', array($this, 'shortcodeDrawGoogle2'));
 	
 	 
     	 add_shortcode('mqttcogs_data', array($this, 'shortcodeData'));	
@@ -259,11 +264,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.96');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.999');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
-		wp_register_script('leaflet', '	https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-	
+		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.999');
 		
 		
 	}
@@ -575,7 +580,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    }*/
 	    
 	       
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'], $_GET['order'],$_GET['jsonfields']);    
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order'],$_GET['jsonfields']);    
 	    //       echo( $_GET['topics']);
 	    //echo json_encode($table);
 	    $json = new stdClass();        
@@ -737,6 +742,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'topic' => '#',
 				'from'=>'',
 				'to'=>'',
+				'aggregations' => '',
+				'group' => '',
 				'order'=>'DESC',
 				'field'=>'payload',
 				'local'=>'false',
@@ -744,7 +751,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		], $atts, NULL);
 	
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],1,$atts['topic'],$atts['order']);
+		$table = $this->getTopN($atts['from'],$atts['to'],1,$atts['topic'],$atts['aggregations'],$atts['group'],$atts['order']);
 	
 		if (sizeof($table->rows) == 0) 
 			return '';
@@ -775,12 +782,14 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                     'topics' => '#',
 	                                     'from'=>'',
 	                                     'to'=>'',
+										 'aggregations' =>'',
+										 'group' => '',
 	  									 'order'=>'DESC',
 	  									 'jsonfields'=>''
 	                                 ], $atts, NULL);
 
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['order'],$atts['jsonfields']);	
+		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order'],$atts['jsonfields']);	
 		$jsonret = json_encode($table);   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
@@ -817,7 +826,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$wpdb->delete( $table_name, array( 'id' => $id ) );
 	}
 	
-	public function getTopN($from, $to, $limit, $topics, $order = 'ASC', $jsonfields='') {
+	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC', $jsonfields='') {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('data');	
 	  
@@ -835,7 +844,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   // $this->write_log($from);
 	
 	    $topics = explode(',',$topics);
-	    
+	    $aggregations = explode(',',$aggregations);
+		
 	    //prevent sql injection here
 	    if ($order != 'ASC') {
 	    	$order = 'DESC';
@@ -848,13 +858,22 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    
 	    //if not json then we decode as we have always
 	    if ($jsonfields=='') {
-    	    //add the datetime column
-    	    $json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
-    	    foreach($topics as $topic) {
+    	    //add the datetime column or grouping column
+			if (empty($group)) {
+				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
+			}
+			else {
+				$json->cols[] = json_decode('{"id":"grouping", "label":"grouping", "type":"number"}');
+			}
+			
+
+    	    foreach($topics as $idx=>$topic) {
     	    	
     	    	$topic = $this->replaceWordpressUser($topic);
-    	    	
-    	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
+    	    	$agg = $aggregations[$idx].'(`payload`) as payload';
+				
+				if (empty($group)) {
+					$sql = $wpdb->prepare("SELECT `utc`,$agg from $table_name
     	    	 						WHERE topic=%s 
     	    	 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
@@ -867,6 +886,25 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						$limit			
     	    	 				        );
     	    	 
+				} 
+				else {
+					$sql = $wpdb->prepare("SELECT EXTRACT($group FROM `utc`) as grouping,$agg from $table_name
+    	    	 						WHERE topic=%s 
+    	    	 						AND ((utc>=%s OR %s='') 
+    	    	 						AND (utc<=%s OR %s='')) 
+										GROUP BY grouping
+    	    	 						order by utc $order limit %d",
+    	    	 						$topic,
+    	    	 						$from,
+    	    	 						$from,
+    	    	 						$to,
+    	    	 						$to,
+    	    	 						$limit			
+    	    	 				        );
+    	    	 
+					
+				}
+    	    	 
     	    	 $therows =  $wpdb->get_results(
     	    	 		$sql		, ARRAY_A );
     	    	
@@ -876,11 +914,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			$colset = false;
 			
     	  	foreach($therows as $row) {
-								
+		
     	  		$o = new stdClass();
     			$o->c = array();
+				if (empty($group)) {
     		        $o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
-    	  		
+				}
+				else {
+					$o->c[] = json_decode('{"v":'.$row["grouping"].'}');
+				}
     	  		
     	  		//loop through columns
     	  		for($i = 0; $i < count($topics); ++$i){
@@ -1053,13 +1095,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                     'action' => 'doGetTopN',
 	                                     'from'=>'',
 	                                     'to'=>'',
+										 'aggregations' => '',
+										 'group' => '',
 	  									 'order'=>'DESC',
 	  									 'jsonfields'=>''
 	                                 ], $atts, NULL);
 	  $limit = $atts['limit'];
 	  $topics = $atts['topics'];
 	 
-	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&order='.$atts["order"].'&jsonfields='.$atts["jsonfields"]);                               
+	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"].'&jsonfields='.$atts["jsonfields"]);                               
 	                                 
 	} 
 	
@@ -1151,6 +1195,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 	
 	public function shortcodeDrawLeaflet($atts, $content) {
+		static $leafletmaps = array();	
 		$this->setupLogging();
 		 //only include google stuff for this shortcode
 	    wp_enqueue_style('leafletcss');
@@ -1160,9 +1205,44 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
 		$id = uniqid();
 		
+		$atts = shortcode_atts([
+	                           'height' => '180px',
+							   'width' =>'',
+	                           'options' => '{}',
+					           'refresh_secs'=>0,
+							   'tilelayers' => '{urlTemplate:\'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png\',options: {attribution: \'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors\'}}'
+	                       ], $atts, NULL);
 		
+		$options = $atts["options"];
+		$height = $atts["height"];
+		$width = $atts["width"];
+		$refresh_secs = $atts["refresh_secs"];
+		$tileLayers = $atts["tilelayers"];
 		
-		return '<div id="'.$id.'">';
+		wp_enqueue_script('leafletdrawer');
+		
+		global $wp_scripts;
+		$content = str_replace('mqttcogs_', 'mqttcogs_ajax_', $content);
+		$content= strip_tags($content);
+		$conent = trim($content);
+		$content = str_replace(array('\r', '\n'), '', trim($content));	
+
+		$content = strip_tags(do_shortcode($content));
+		$querystring =  str_replace(array("\r", "\n"), '', $content);
+
+		$script = '<div id="'.$id.'" style="height:'.$atts['height'].'">';
+	 
+	    $leafletmaps[] = array(
+  	     "id"=>$id,
+  	     "refresh_secs"=>$refresh_secs,
+  	     "options"=> $options,
+		 "tilelayers"=> $tileLayers,
+  	     "querystring"=>$querystring
+  	    );
+  	    
+        $wp_scripts->add_data('leafletdrawer', 'data', '');
+    	wp_localize_script( 'leafletdrawer', 'allmaps', $leafletmaps);
+    	return $script;	
 	}
 	
 	//////
