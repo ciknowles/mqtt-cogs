@@ -264,11 +264,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.999');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.16');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.999');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.16');
 		
 		
 	}
@@ -593,10 +593,16 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    header("Cache-Control: no-cache, must-revalidate");
 	    header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
 	 
-	    header("Content-type: application/json");
+	    header("Content-type: application/javascript");
 	    
 	    //$jsonret = json_encode($json);
-	   $jsonret = 'google.visualization.Query.setResponse('.json_encode($json).');';
+		if (array_key_exists('responseHandler', $tqx)) {
+		    
+			$jsonret = $tqx['responseHandler'].'('.json_encode($json).');';
+		} else {
+			$jsonret = 'google.visualization.Query.setResponse('.json_encode($json).');';
+		}
+	   
 	   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);

@@ -13,7 +13,8 @@ if (allcharts && allcharts.length>0) {
         			}
         			else {
         				var data = response.getDataTable();	 
-        				self.chart.draw(data, eval('('+self.options+')'));
+						
+        				self.chart.draw(data, Function('"use strict";return (' + self.options + ')')());
         			}
         	        
         	        if (parseInt(self.refresh_secs)>0) {
