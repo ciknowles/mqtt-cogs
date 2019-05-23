@@ -5,30 +5,36 @@ if (allcharts && allcharts.length>0) {
         //chart/query/
         var self = this;
         var chartinfo = self.allcharts[i];
+		if (chartinfo.script) {
+			chartinfo.script = Function('"use strict"; return ' + chartinfo.script)();
+		}
 		
 		chartinfo.responseHandler = function (response) {
 		    var self = this;
-                	if (response.isError()) {
-            			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());	
-        			}
-        			else {
-        				var data = response.getDataTable();	 
-						
-        				self.chart.draw(data, Function('"use strict";return (' + self.options + ')')());
-        			}
-        	        
-        	        if (parseInt(self.refresh_secs)>0) {
-            	        setTimeout(function () {
-            	            self.query.send(self.responseHandler.bind(self));
-            	        },parseInt(self.refresh_secs)*1000);
-        	        }
-            };
+			if (response.isError()) {
+				alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());	
+			}
+			else {
+				var data = response.getDataTable();	 	
+				if (chartinfo.script) {
+					data = chartinfo.script(data, self.chart, self.options);
+				}
+				else {
+					self.chart.draw(data, Function('"use strict";return (' + self.options + ')')());
+				}
+			}
+			
+			if (parseInt(self.refresh_secs)>0) {
+				setTimeout(function () {
+					self.query.send(self.responseHandler.bind(self));
+				},parseInt(self.refresh_secs)*1000);
+			}
+		};
     
 		chartinfo.onLoadCallback = function () {
 		    var self = this;
             self.chart = new google.visualization[self.charttype](document.getElementById(self.id));    
             self.query = new google.visualization.Query(self.querystring);
-       
             self.query.send(self.responseHandler.bind(self));
         };
 		

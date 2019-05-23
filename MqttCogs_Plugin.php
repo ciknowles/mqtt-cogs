@@ -255,20 +255,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	
     	add_action('wp_ajax_doSet', array(&$this, 'ajaxACTION_doSet'));
     	add_action('wp_ajax_nopriv_doSet', array(&$this, 'ajaxACTION_doSet'));
-    
-    	add_action('wp_ajax_doSQL', array(&$this, 'ajaxACTION_doSQL'));
-    	add_action('wp_ajax_nopriv_doSQL', array(&$this, 'ajaxACTION_doSQL'));
    	}
    	   	 
 	public function enqueueStylesAndScripts() {
 		
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.16');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.36');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.16');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.36');
 		
 		
 	}
@@ -581,8 +578,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    
 	       
 	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order'],$_GET['jsonfields']);    
-	    //       echo( $_GET['topics']);
-	    //echo json_encode($table);
+	  
 	    $json = new stdClass();        
 	    $json->status = 'ok';
 	    $json->reqId = $tqx['reqId'];
@@ -592,22 +588,18 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    header("Pragma: no-cache");
 	    header("Cache-Control: no-cache, must-revalidate");
 	    header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
-	 
 	    header("Content-type: application/javascript");
 	    
-	    //$jsonret = json_encode($json);
-		if (array_key_exists('responseHandler', $tqx)) {
-		    
+		if (array_key_exists('responseHandler', $tqx)) {    
 			$jsonret = $tqx['responseHandler'].'('.json_encode($json).');';
 		} else {
 			$jsonret = 'google.visualization.Query.setResponse('.json_encode($json).');';
 		}
 	   
-	   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
-	    echo $jsonret;
-	    die();
+	   echo $jsonret;
+	   die();
 		//wp_send_json($jsonret);
 	}
 	
@@ -845,9 +837,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    	$to = time() + floatval($to)*86400;
 	    	$to = date('Y-m-d H:i:s', $to);
 	    }
-	    	
-	   // $this->write_log($topics);
-	   // $this->write_log($from);
 	
 	    $topics = explode(',',$topics);
 	    $aggregations = explode(',',$aggregations);
@@ -864,18 +853,22 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    
 	    //if not json then we decode as we have always
 	    if ($jsonfields=='') {
+			
+			//$json->cols[] = json_decode('{"id":"topic", "label":"topic", "type":"string"}');
+			
     	    //add the datetime column or grouping column
 			if (empty($group)) {
 				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
 			}
 			else {
-				$json->cols[] = json_decode('{"id":"grouping", "label":"grouping", "type":"number"}');
+				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"number"}');
 			}
 			
 
     	    foreach($topics as $idx=>$topic) {
-    	    	
     	    	$topic = $this->replaceWordpressUser($topic);
+				
+				
     	    	$agg = $aggregations[$idx].'(`payload`) as payload';
 				
 				if (empty($group)) {
@@ -911,57 +904,60 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					
 				}
     	    	 
-    	    	 $therows =  $wpdb->get_results(
-    	    	 		$sql		, ARRAY_A );
+    	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
     	    	
-			$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
+				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
 
+				
+				$colset = false;
+				
+				foreach($therows as $row) {
 			
-			$colset = false;
-			
-    	  	foreach($therows as $row) {
-		
-    	  		$o = new stdClass();
-    			$o->c = array();
-				if (empty($group)) {
-    		        $o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
-				}
-				else {
-					$o->c[] = json_decode('{"v":'.$row["grouping"].'}');
-				}
-    	  		
-    	  		//loop through columns
-    	  		for($i = 0; $i < count($topics); ++$i){
-    	  			
-    	  			if ($i==$index) {
-						if (!$colset) {
+					$o = new stdClass();
+					$o->c = array();
+					
+					//add topic
+					//$o->c[] = json_decode('{"v":"'.$topic.'"}');
+					
+					//add grouping
+					if (empty($group)) {
+						$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
+					}
+					else {
+						$o->c[] = json_decode('{"v":'.$row["grouping"].'}');
+					}
+					
+					//loop through columns
+					for($i = 0; $i < count($topics); ++$i){
+						if ($i==$index) {
+							if (!$colset) {
+								if (is_numeric($row['payload'])) {
+									//add the next column definition
+									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"number"}');	
+								}
+								else {
+									//add the next column definition
+									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"string"}');	
+								}
+								$colset = true;
+							}
 							if (is_numeric($row['payload'])) {
-								//add the next column definition
-								$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"number"}');	
+								$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
 							}
 							else {
-								//add the next column definition
-								$json->cols[] = json_decode('{"id":"topic_'.$index.'","type":"string"}');	
+								$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
 							}
-							$colset = true;
 						}
-    	  				if (is_numeric($row['payload'])) {
-    		  				$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
-    	  				}
-    	  				else {
-    		  				$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
-    	  				}
-    	  			}
-    	  			else {
-    	  				$o->c[] = json_decode('{"v":null}');  
-    	  			}
-      			}	
-    			
-    		        $json->rows[] =$o;
-    	        }
+						else {
+							$o->c[] = json_decode('{"v":null}');  
+						}
+					}	
+					
+					$json->rows[] =$o;
+				} //row
     	      
-    	    	$index++; 
-    	    } 	 
+    	    $index++; 
+    	    } //topic	 
 	    }
 	    //we are returning json data....
 	    
@@ -1035,16 +1031,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
                                     break;
                             }
                         } 
-            	        
-            	        
-    	        	  /*  foreach($jsonprops as $prop) {
-        	  			    if (is_numeric($payload[$prop])) {
-        		  				$o->c[] = json_decode('{"v":'.$payload[$prop].'}'); 
-        	  				}
-        	  				else {
-        		  				$o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
-        	  				}        
-    	  			    }*/
             	  			
               		    $json->rows[] =$o;
         	        }
@@ -1061,33 +1047,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 	
 	
-	
-	public function ajaxACTION_doSQL() {
-		$this->setupLogging();
-		
-		/*if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
-			return '';
-		}*/
-           
-           header("Pragma: no-cache");
-	    header("Cache-Control: no-cache, must-revalidate");
-	    header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
-	 
-	    /*header("Content-type: text/plain");*/
-	   
-    
-          $table_name = $this->prefixTableName('data');	
-          
-     
-	   new MyDataSource($table_name);
-	    
-	   die();
-	   
-	  
-	}
-	
-	
-
 	public function ajax_data($atts,$content) {
 		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
 			return '';
@@ -1095,7 +1054,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
  
-	  $atts = shortcode_atts([
+	    $atts = shortcode_atts([
 	                                     'limit' => '999999',
 	                                     'topics' => '',
 	                                     'action' => 'doGetTopN',
@@ -1106,15 +1065,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  									 'order'=>'DESC',
 	  									 'jsonfields'=>''
 	                                 ], $atts, NULL);
-	  $limit = $atts['limit'];
-	  $topics = $atts['topics'];
+	   $limit = $atts['limit'];
+	   $topics = $atts['topics'];
 	 
-	  return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"].'&jsonfields='.$atts["jsonfields"]);                               
-	                                 
+	   return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"].'&jsonfields='.$atts["jsonfields"]);                                                              
 	} 
 	
+	/*
 	public function shortcodeDrawGoogle2($atts,$content) {
-	 /* wp_enqueue_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));*/
+	 
 	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
  
  	  
@@ -1198,15 +1157,20 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    </script></div>';
 	   
     	return $script;	
-	}
+	}*/
+	
 	
 	public function shortcodeDrawLeaflet($atts, $content) {
 		static $leafletmaps = array();	
 		$this->setupLogging();
-		 //only include google stuff for this shortcode
+		//we include google scripts here for JSON parsing and datatable support
+		wp_enqueue_script('google_loadecharts');
+	    wp_enqueue_script('loadgoogle');
+	  
+	    //leaflet libraries
 	    wp_enqueue_style('leafletcss');
 	    wp_enqueue_script('leaflet');
-			
+		wp_enqueue_script('leafletdrawer');	
 		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
 		$id = uniqid();
@@ -1216,7 +1180,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 							   'width' =>'',
 	                           'options' => '{}',
 					           'refresh_secs'=>0,
-							   'tilelayers' => '{urlTemplate:\'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png\',options: {attribution: \'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors\'}}'
+							   'tilelayers' => '{urlTemplate:\'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png\',options: {attribution: \'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors\'}}',
+							   'script' => ''
 	                       ], $atts, NULL);
 		
 		$options = $atts["options"];
@@ -1224,13 +1189,19 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$width = $atts["width"];
 		$refresh_secs = $atts["refresh_secs"];
 		$tileLayers = $atts["tilelayers"];
+		//$prescript = $atts["script"];
 		
-		wp_enqueue_script('leafletdrawer');
 		
+		if ($atts["script"]!=='') {
+			global $post;
+			//$post->ID; 
+			$prescript = get_post_meta($post->ID, $atts["script"], true);
+		}
+	
 		global $wp_scripts;
 		$content = str_replace('mqttcogs_', 'mqttcogs_ajax_', $content);
 		$content= strip_tags($content);
-		$conent = trim($content);
+		$content = trim($content);
 		$content = str_replace(array('\r', '\n'), '', trim($content));	
 
 		$content = strip_tags(do_shortcode($content));
@@ -1243,7 +1214,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
   	     "refresh_secs"=>$refresh_secs,
   	     "options"=> $options,
 		 "tilelayers"=> $tileLayers,
-  	     "querystring"=>$querystring
+  	     "querystring"=>$querystring,
+		 "script"=>$prescript
   	    );
   	    
         $wp_scripts->add_data('leafletdrawer', 'data', '');
@@ -1262,23 +1234,21 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  wp_enqueue_script('google_loadecharts');
 	  wp_enqueue_script('loadgoogle');
 			
-	  
-	
  	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
  
 	  $atts = shortcode_atts([
 	                           'charttype' => 'LineChart',
 	                            'options' => '{"width":400,"height":300}',
-					            'refresh_secs'=>0
+					            'refresh_secs'=>0,
+								'script' => ''
 	                       ], $atts, NULL);
 	
 		
 	$id = uniqid();
-//	$ajax = ($atts['refresh_secs'] > 0);
-	
     $options = $atts["options"];
     $charttype = $atts["charttype"];
 	$refresh_secs = $atts["refresh_secs"];
+	$prescript = $atts["script"];
 	
   	wp_enqueue_script('chartdrawer');
   	
@@ -1295,12 +1265,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	$script = '
 	 <div id="'.$id.'"></div>';
 	 
-	      $graphs[] = array(
+	 $graphs[] = array(
   	     "id"=>$id,
   	     "refresh_secs"=>$refresh_secs,
   	     "options"=> $options,
   	     "charttype"=>$charttype,
-  	     "querystring"=>$querystring
+  	     "querystring"=>$querystring,
+		 "script"=>$prescript
   	    );
   	    
         $wp_scripts->add_data('chartdrawer', 'data', '');
@@ -1391,7 +1362,6 @@ class MySubscribeCallback extends MessageHandler
 					}
 				}
 			}
-
 			
 		
 			$wpdb->insert(
@@ -1409,11 +1379,6 @@ class MySubscribeCallback extends MessageHandler
 							'%s'
 					)
 					);
-			/*$publish_object = apply_filters('mqttcogs_msg_in_pre',$publish_object ,$utc);
-			
-			if (!isset($publish_object)) {
-				return;
-			}*/
 			
 			do_action_ref_array(
 								'after_mqttcogs_msg_in',
@@ -1441,6 +1406,7 @@ class MySubscribeCallback extends MessageHandler
 	}
 }
 
+/*
  // The custom class that defines how the data is generated
  class MyDataSource extends Google\Visualization\DataSource\DataSource
   {
@@ -1466,5 +1432,5 @@ class MySubscribeCallback extends MessageHandler
     }
 
     public function isRestrictedAccessMode() { return FALSE; }
- }
+ }*/
 

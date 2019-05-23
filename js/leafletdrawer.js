@@ -1,40 +1,42 @@
-var $jsonp = (function(){
-  var that = {};
-
-  that.send = function(src, options) {
-    var callback_name = options.callbackName || 'callback',
-      on_success = options.onSuccess || function(){},
-      on_timeout = options.onTimeout || function(){},
-      timeout = options.timeout || 10; // sec
-
-    var timeout_trigger = window.setTimeout(function(){
-      window[callback_name] = function(){};
-      on_timeout();
-    }, timeout * 1000);
-
-    window[callback_name] = function(data){
-      window.clearTimeout(timeout_trigger);
-      on_success(data);
-    }
-
-    var script = document.createElement('script');
-    script.type = 'text/javascript';
-    script.async = true;
-    script.src = src;
-
-    document.getElementsByTagName('head')[0].appendChild(script);
-  }
-
-  return that;
-})();
-
 
 if (allmaps && allmaps.length>0) {
     for(var i=0;i<allmaps.length;i++) {
 		var self = this;
         var mapinfo = self.allmaps[i];
 		mapinfo.map =  L.map(mapinfo.id, eval('('+mapinfo.options+')')); 
-		
+		if (mapinfo.script) {
+					mapinfo.script = Function('"use strict"; return ' + mapinfo.script)();
+		} 
+		else {
+			mapinfo.script = function (data, map, mapoptions) {
+				var markerArray = [];
+
+				//loop through rows
+				for (var ridx=0;ridx<data.getNumberOfRows();ridx++) {
+					for (var cidx=1;cidx<data.getNumberOfColumns();cidx++) {
+						//ignore if null
+						if (data.getValue(ridx, cidx) == null) {
+							continue;
+						}
+						
+						//find a lat or lon
+						var payload = data.getValue(ridx, cidx);
+						var lat = payload.lat?payload.lat:payload.latitude;
+						var lon = payload.lon?payload.lon:(payload.lng?payload.lng:payload.longitude);
+						
+						if (lat && lon) {
+							markerArray.push(L.marker(new Array(lat, lon))
+							.bindPopup(data.getColumnLabel(cidx) + ' @ ' + data.getValue(ridx,0)));
+						}
+					}	
+				}
+
+				var group = L.featureGroup(markerArray).addTo(map);
+				map.fitBounds(group.getBounds());
+			}
+		}
+
+					
 		if (mapinfo.tilelayers) {
 			var tilelayers = Function('"use strict";return (' + mapinfo.tilelayers + ')')();
 			tilelayers = [].concat(tilelayers);
@@ -44,29 +46,34 @@ if (allmaps && allmaps.length>0) {
 			}
 		}
 
-		//callback when new data arrives
 		mapinfo.responseHandler = function (response) {
 		    var self = this;
+			if (response.isError()) {
+				alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());	
+			}
+			else {
+				var data = response.getDataTable();	 
+				
+				if (mapinfo.script) {
+					mapinfo.script(data, mapinfo.map, mapinfo.options);
+				}
+			}
 			
-		}
+			if (parseInt(self.refresh_secs)>0) {
+				setTimeout(function () {
+					self.query.send(self.responseHandler.bind(self));
+				},parseInt(self.refresh_secs)*1000);
+			}
+		};
+    
+		mapinfo.onLoadCallback = function () {
+		    var self = this;
+            self.query = new google.visualization.Query(self.querystring);
+            self.query.send(self.responseHandler.bind(self));
+        };
 		
-		var uid =  Math.random().toString(36).substr(2, 9);		
-		//call to get new data
-		mapinfo.send = function() {
-			//tqx=responseHandler:TEST
-			var self = this;
-			$jsonp.send(mapinfo.querystring + '&' + 'tqx=responseHandler:' + uid, {
-				callbackName: uid,
-				onSuccess: self.responseHandler,
-				onTimeout: function(){
-					console.log('timeout!');
-				},
-				timeout: 5
-			});
-			
-		}
-		
-		mapinfo.send.bind(mapinfo)();
+	
+        google.charts.setOnLoadCallback(mapinfo.onLoadCallback.bind(mapinfo));
 	}
 }
 		
