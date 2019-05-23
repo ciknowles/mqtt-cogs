@@ -261,11 +261,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.36');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.39');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.36');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.39');
 		
 		
 	}
@@ -1196,6 +1196,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			global $post;
 			//$post->ID; 
 			$prescript = get_post_meta($post->ID, $atts["script"], true);
+			$prescript = str_replace(array('\r', '\n', '\t'), '', trim($prescript));	
 		}
 	
 		global $wp_scripts;
