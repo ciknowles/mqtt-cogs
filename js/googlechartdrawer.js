@@ -5,8 +5,49 @@ if (allcharts && allcharts.length>0) {
         //chart/query/
         var self = this;
         var chartinfo = self.allcharts[i];
+        chartinfo.options = Function( '"use strict";return (' + chartinfo.options + ')')();
+        
 		if (chartinfo.script) {
-			chartinfo.script = Function('"use strict"; return ' + chartinfo.script)();
+			chartinfo.script =new  Function('"use strict";return ' + chartinfo.script + ';')();
+		}
+		else {
+			chartinfo.script = function (data, chart, options) {
+				
+				if (this.charttype == 'Map') {				
+					var view  = new google.visualization.DataView(data);
+					
+					view.setColumns([
+									{
+										calc:function (data, ridx) {
+											var payload = data.getValue(ridx, 1);
+											return payload.lat?payload.lat:payload.latitude;
+										}, 
+										type:'number', 
+										label:'Lat'
+									},
+									{
+										calc:function (data, ridx) {
+											var payload = data.getValue(ridx, 1);
+											return payload.lon?payload.lon:(payload.lng?payload.lng:payload.longitude);
+										}, 
+										type:'number', 
+										label:'Long'
+									},
+									{
+										calc:function (data, ridx) {
+											return data.getColumnId(1) + ' @ ' + data.getValue(ridx,0);
+										},
+										type:'string', 
+										label:'Description'
+									}
+								]);
+					
+					chart.draw(view, options);
+				} 
+				else {
+					chart.draw(data, options);
+				}
+			}
 		}
 		
 		chartinfo.responseHandler = function (response) {
@@ -16,11 +57,9 @@ if (allcharts && allcharts.length>0) {
 			}
 			else {
 				var data = response.getDataTable();	 	
-				if (chartinfo.script) {
-					data = chartinfo.script(data, self.chart, self.options);
-				}
-				else {
-					self.chart.draw(data, Function('"use strict";return (' + self.options + ')')());
+				
+				if (self.script) {
+					self.script.bind(self)(data, self.chart, self.options);
 				}
 			}
 			

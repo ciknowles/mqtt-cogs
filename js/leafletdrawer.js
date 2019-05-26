@@ -3,9 +3,11 @@ if (allmaps && allmaps.length>0) {
     for(var i=0;i<allmaps.length;i++) {
 		var self = this;
         var mapinfo = self.allmaps[i];
-		mapinfo.map =  L.map(mapinfo.id, Function('"use strict";return (' + mapinfo.options + ')')()); 
+		mapinfo.options = Function('"use strict";return (' + mapinfo.options + ')')();
+    
+		mapinfo.map =  L.map(mapinfo.id, mapinfo.options); 
 		if (mapinfo.script) {
-					mapinfo.script = Function('"use strict"; return ' + mapinfo.script)();
+					mapinfo.script = new Function('"use strict"; return ' + mapinfo.script + ';')();
 		} 
 		else {
 			mapinfo.script = function (data, map, mapoptions) {

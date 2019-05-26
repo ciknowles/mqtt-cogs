@@ -2,10 +2,10 @@
 require(__DIR__ . '/./sskaje/autoload.example.php');
 require(__DIR__ . '/./flock/Lock.php');
 
-require_once __DIR__ . '/./AutoLoadByNamespace.php';
+//require_once __DIR__ . '/./AutoLoadByNamespace.php';
 
-spl_autoload_register("AutoloadByNamespace::autoload");
-AutoloadByNamespace::register("Google\Visualization\DataSource", __DIR__ . '/./google-visualization');
+//spl_autoload_register("AutoloadByNamespace::autoload");
+//AutoloadByNamespace::register("Google\Visualization\DataSource", __DIR__ . '/./google-visualization');
 
 include_once('MqttCogs_LifeCycle.php');
 
@@ -261,11 +261,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '5.39');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '2.2');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '5.39');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.2');
 		
 		
 	}
@@ -1190,7 +1190,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$refresh_secs = $atts["refresh_secs"];
 		$tileLayers = $atts["tilelayers"];
 		//$prescript = $atts["script"];
-		
+		$prescript='';
 		
 		if ($atts["script"]!=='') {
 			global $post;
@@ -1249,8 +1249,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     $options = $atts["options"];
     $charttype = $atts["charttype"];
 	$refresh_secs = $atts["refresh_secs"];
-	$prescript = $atts["script"];
+	$prescript='';
 	
+	if ($atts["script"]!=='') {
+			global $post;
+			//$post->ID; 
+			$prescript = get_post_meta($post->ID, $atts["script"], true);
+			$prescript = str_replace(array('\r', '\n', '\t'), '', trim($prescript));	
+		}
+		
   	wp_enqueue_script('chartdrawer');
   	
   	global $wp_scripts;
@@ -1406,32 +1413,4 @@ class MySubscribeCallback extends MessageHandler
 		}
 	}
 }
-
-/*
- // The custom class that defines how the data is generated
- class MyDataSource extends Google\Visualization\DataSource\DataSource
-  {
-    private $table;
-	
-    public function __construct($table)
-    {
-	$this->table = $table;	
-
-        $_REQUEST['tq'] = stripslashes ($_REQUEST['tq']);
-
-	parent::__construct();
-    }
-	
-    public function getCapabilities() { return Google\Visualization\DataSource\Capabilities::SQL; }
-
-    public function generateDataTable(Google\Visualization\DataSource\Query\Query $query)
-    {          
-     
-
-      global $wpdb; 
-      return Google\Visualization\DataSource\Util\WPDataSourceHelper::executeQuery($query, $wpdb, $this->table);
-    }
-
-    public function isRestrictedAccessMode() { return FALSE; }
- }*/
 
