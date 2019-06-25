@@ -1208,7 +1208,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$content = strip_tags(do_shortcode($content));
 		$querystring =  str_replace(array("\r", "\n"), '', $content);
 
-		$script = '<div id="'.$id.'" style="height:'.$atts['height'].'">';
+		$script = '<div><div id="'.$id.'" style="height:'.$atts['height'].'"/></div>';
 	 
 	    $leafletmaps[] = array(
   	     "id"=>$id,
