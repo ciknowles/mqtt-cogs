@@ -39,7 +39,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		wp_clear_scheduled_hook('mqtt_cogs_prune');
 				
 		try {
-		    $file = './mqttcogs_lock.pid';    
+		      $file = './'.$this->prefixTableName('lock.pid');	
 		    unlink($file);
 		}
 		catch (Exception $e) {
@@ -170,30 +170,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 		$sql = "ALTER TABLE $table_name ADD INDEX `idx_buffer_topic` (`topic`(50), `utc`);";
 		$wpdb->query($sql);
-		
-		$table_name = $this->prefixTableName('lastdata');				
-		$charset_collate = $wpdb->get_charset_collate();
-					
-		$sql = "CREATE TABLE $table_name (
-		topic tinytext NOT NULL,
-		utc  datetime NOT NULL,
-		payload text NOT NULL,
-		qos tinyint NOT NULL,
-		retain tinyint NOT NULL,
-		PRIMARY KEY  (topic(50))
-		) $charset_collate;";
-		
-		$wpdb->query($sql);
-	
-		$sql = "ALTER TABLE $table_name ADD INDEX `idx_lastdata_topic` (`topic`(50), utc);";
-		$wpdb->query($sql);
-		
-		$table_name = $this->prefixTableName('data');
-		$lastdatatable_name = $this->prefixTableName('lastdata');
-		
-		$sql = "DELIMITER // CREATE TRIGGER trg_data_ins AFTER INSERT ON $table_name FOR EACH ROW BEGIN INSERT INTO $lastdatatable_name (topic, utc, payload, qos,retain) VALUES (NEW.topic,NEW.utc,NEW.payload,NEW.qos,NEW.retain) ON DUPLICATE KEY UPDATE utc = VALUES(utc), payload = VALUES(payload), qos = VALUES(qos), retain = VALUES(retain); END; // DELIMITER ;";
-
-		$wpdb->query($sql);
     }
 
     /**
@@ -206,13 +182,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			
 		global $wpdb;
 		$tableName = $this->prefixTableName('data');
-		$wpdb->query("DROP TABLE IF EXISTS `$tableName`");
-		
-		
-		$tableName = $this->prefixTableName('buffer');
-		$wpdb->query("DROP TABLE IF EXISTS `$tableName`");
-		
-		$tableName = $this->prefixTableName('lastdata');
 		$wpdb->query("DROP TABLE IF EXISTS `$tableName`");
     }
 
@@ -266,9 +235,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	 
 		 //this is not completed yet
 		 add_shortcode('mqttcogs_drawleaflet', array($this, 'shortcodeDrawLeaflet'));
-		 
-		  //this is not completed yet
-		 add_shortcode('mqttcogs_drawdatatable', array($this, 'shortcodeDrawDataTable'));
 			 
 		 //this is experimental
 		 add_shortcode('mqttcogs_graph', array($this, 'shortcodeDrawGoogle2'));
@@ -301,11 +267,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
 		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.2');
 		
-		wp_register_style('datatablescss', 'https://cdn.datatables.net/1.10.19/css/jquery.dataTables.min.css');
-		wp_register_script('datatables', 'https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js');
-		wp_register_script('datatablesdrawer', plugins_url('/js/datatablesdrawer.js', __FILE__), array(), '2.43');
-	
-	
+		
 	}
 
     //prunes the mqttcogs database table. Run daily
@@ -332,11 +294,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
 	    Debug::Log(DEBUG::DEBUG, 'Pruning MqttCogs buffer table');
 		$wpdb->query($sql);										
-		
-		$table_name = $this->prefixTableName('lastdata');
-		$sql = "DELETE from $table_name WHERE DATEDIFF(NOW(),utc) > $dur;";
-	    Debug::Log(DEBUG::DEBUG, 'Pruning MqttCogs lastdata table');
-		$wpdb->query($sql);			
 	}    
 
     //
@@ -349,7 +306,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}
 		
 		$this->setupLogging();
-		$file = './mqttcogs_lock.pid';
+	  $file = './'.$this->prefixTableName('lock.pid');	
 		$lock = new flock\Lock($file);
 		
 		// Non-blocking case. Acquire lock if it's free, otherwse exit immediately
@@ -461,7 +418,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	public function isNodeOnline($topic, $rootkey) {
 		$pieces = explode("/", $topic);
-		
+			
 		//mysensors_out/10/255/3/0/32
 		if (count($pieces)<6)  {
 			return true;				
@@ -475,21 +432,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$cmd = $pieces[3];
 		$ack = $pieces[4];
 		$type = $pieces[5];
-		$time = time();
-		//mysensors_out/10/255/3/0/32
-		$rows = $this->getLastN('data', $key.'/'.$nodeid.'/255/3/0/32', 1, 'DESC');
+		
+		$rows = $this->getLastN('data', $key.'/'.$nodeid.'/'.$sensor.'/255/3/0/32', 1, 'DESC');
 		if (count($rows)==1) {
 			$utcunixdate = strtotime($rows[0]['utc']);
-			$stayalive = intval($rows[0]['payload']);
-		
-		    //remember it is in ms	
-			return (($time>=$utcunixdate) && ($time*1000<$utcunixdate*1000 + $stayalive));
+			$stayalive = intval($rows[0]['utc']);
+			return (($time()>=$utcunixdate) && ($time()<$utcunixdate + $stayalive));
 		}			
-		Debug::Log(DEBUG::DEBUG,"isNodeOnline: no last value");
 		return false;
 	}
 	
-	public function bufferMessage($topic,$payload,$qos,$retained) {
+	public function bufferMessage($utc, $topic,$payload,$qos,$retained) {
 		global $wpdb;
 		$tableName = $this->prefixTableName('buffer');
 		$utc = current_time( 'mysql', true );
@@ -513,23 +466,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 	
 	public function sendMqtt($id, $topic, $payload, $qos, $retained, $result) {
-	    $this->setupLogging();
 		return $this->sendMqttInternal($id, $topic, $payload, $qos, $retained, true, $result);
 	}
 	
 	public function sendMqttInternal($id, $topic, $payload, $qos, $retained, $trybuffer, $result) {
-    	$json = new stdClass();	
-    	
+	
 		if ($trybuffer) {
-		    Debug::Log(DEBUG::DEBUG,"sendMqttInternal: Attempting to buffer {$topic}");
-		
 			if (!$this->isNodeOnline($topic, $this->getOption('MQTT_MySensorsRxTopic', 'mysensors_out'))) {
-				$this->bufferMessage($topic,$payload,$qos,$retained);	
+				$this->bufferMessage($utc, $topic,$payload,$qos,$retained);	
 				$json->status = 'buffered';
-				  Debug::Log(DEBUG::DEBUG,"sendMqttInternal: Buffered {$topic}");
 				return true;
 			}
-		     
 		}
 		
 	    //if online send to broker
@@ -630,7 +577,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    }*/
 	    
 	       
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order'],$_GET['pivot']);    
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order'],$_GET['jsonfields']);    
 	  
 	    $json = new stdClass();        
 	    $json->status = 'ok';
@@ -655,7 +602,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	   die();
 		//wp_send_json($jsonret);
 	}
-	
 	
 	private function replaceWordpressUser($somestring) {
 	     $current_user = wp_get_current_user();
@@ -685,9 +631,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'retained'=>'0',
 				'id'=>uniqid(),
 				'class'=>'',
-				'button_text'=>'+',
+				'input_value'=>'0',
 				'label_text'=>'',
-				
 				'input_type'=> 'text',
 				'input_title' => '',
 				'input_pattern' => '',
@@ -700,6 +645,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		], $atts, NULL);
 	
 		$currentvalue = $this->shortcodeGet($atts);
+		
+		if (!$currentvalue) {
+			$currentvalue = $atts['input_value'];
+		}
+		
 		$id =uniqid();
 		$class = $atts['class'];
 		$topic =  $this->replaceWordpressUser($atts['topic']);
@@ -728,40 +678,59 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 		$url = $this->getAjaxUrl($action);
 		
+		//case where there is no last value
+		if (!$currentvalue) {
+			$currentvalue= $atts['input_value'];
+
+			//if it looks integer then make it integer
+			if (is_numeric($currentvalue)) {
+				$currentvalue = $currentvalue+0;
+			}			
+			//else it is a string
+		}
+		
 		
 		//TODO: how to notify user that update was successful
+		$checked = '';
+		if (($input_type=="type='checkbox'") && (($currentvalue>0) || (strcmp($currentvalue,'true')==0) )) {
+			$checked = 'checked';
+		}
 		
 		$script = "
 	 	<div id='$id' class='$class'>
-	 		
-	 		<label for='mqttcogs_set_$id'>$label</label>
-	 		<input id='mqttcogs_set_$id' value='$currentvalue' $input_type $input_title $input_pattern $input_min $input_max $input_step >
-	 		<input id='mqttcogs_set_btn_$id' type='submit' value='$button_text' onclick='setMQTTData$id()'>
-	 	
+	 		<input id='mqttcogs_set_$id' value='$currentvalue' $input_type $input_title $input_pattern $input_min $input_max $input_step onchange='setMQTTData$id()' $checked>
+			<label for='mqttcogs_set_$id'>$label<span class='sw'></span></label>	
+			
 	 	 	<script type='text/javascript'>
-	    		   
-	 	 	jQuery('#mqttcogs_set_$id').focusin(function () {
-	 	 		jQuery('#mqttcogs_set_btn_$id').val('$button_text');
-	 	 	});
-	 	 	
+	    		
 	      	function setMQTTData$id() {
 	      		
-	      		if (jQuery('#mqttcogs_set_$id')[0].checkValidity()) { 
-					jQuery('#mqttcogs_set_btn_$id').prop('disabled', true);
+	      		if (jQuery('#mqttcogs_set_$id')[0].checkValidity()) { 				
+					var val = (document.getElementById('mqttcogs_set_$id')).value;
 					
-					jQuery.get('$url' + document.getElementById('mqttcogs_set_$id').value,function( data ) {
+					//if it is a checkbox we decide how to proceed here
+					if (document.getElementById('mqttcogs_set_$id').type=='checkbox') {
+						if (isNaN(val)) {
+							val = document.getElementById('mqttcogs_set_$id').checked?'true':'false';
+						}
+						else {
+							val = document.getElementById('mqttcogs_set_$id').checked?1:0;
+						}
+					}
+					
+					jQuery.get('$url' + val,function( data ) {
 					
 					  	switch(data.status) {
 								case 'ok':
-									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+									//jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
 									break;
 								
 								case 'buffered':
-									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+//									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
 									break;
 								
 								default:
-									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10060').text());
+//									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10060').text());
 									break;
 						}
 	  					
@@ -771,7 +740,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					    alert( 'error' + data);
 					  })
 					  .always(function() {
-					    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
+	//				    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
 					    
 					  });
 				 }
@@ -814,7 +783,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			case "datetime":
 				$ret = str_replace('DSTART(', '', $table->rows[0]->c[0]->v);
 				$ret = str_replace(')DEND', '', $ret);
-				return  date_i18n($atts['dateformat'],  ((int) $ret)/1000, $local);
+				if ($atts['dateformat'] === 'human_time_diff') {
+					return human_time_diff((int) $ret/1000,  current_time( 'timestamp' ));
+				}
+				else {
+					return  date_i18n($atts['dateformat'],  ((int) $ret)/1000, $local);
+				}
 			default:
 				return $table->rows[0]->c[1]->v;
 		}
@@ -837,11 +811,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 										 'aggregations' =>'',
 										 'group' => '',
 	  									 'order'=>'DESC',
-	  									 'pivot'=>'true'
+	  									 'jsonfields'=>''
 	                                 ], $atts, NULL);
 
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order'],$atts['pivot']);	
+		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order'],$atts['jsonfields']);	
 		$jsonret = json_encode($table);   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
@@ -878,11 +852,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$wpdb->delete( $table_name, array( 'id' => $id ) );
 	}
 	
-	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC', $pivot='true') {
+	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC', $jsonfields='') {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('data');	
-		$last_table_name = $this->prefixTableName('lastdata');	
-		
+	  
 	    if (is_numeric($from)) {      
 	    	$from = time() + floatval($from)*86400;
 	    	$from = date('Y-m-d H:i:s', $from);
@@ -893,32 +866,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    	$to = date('Y-m-d H:i:s', $to);
 	    }
 	
-	    $reqtopics = explode(',',$topics);
-		
-		$topics = array();
-		foreach($reqtopics as $idx=>&$topic) {
-    	   
-			$topic = $this->replaceWordpressUser($topic);
-			
-			//detect if we have a wildcard %
-			if (strpos($topic, '%') !== false) {
-				//if we do, then we need to find all matched topics
-				$sql = $wpdb->prepare("SELECT DISTINCT(`topic`) from $last_table_name
-    	    	 						WHERE topic LIKE %s",
-    	    	 						$topic
-    	    	 				        );
-				$therows =  $wpdb->get_results($sql, ARRAY_A );
-				foreach($therows as $row) {
-					array_push($topics, $row['topic']);
-				}
-			}
-			else {
-				array_push($topics, $topic);
-			}
-		}
-		unset($topic);
-		
-				
+	    $topics = explode(',',$topics);
 	    $aggregations = explode(',',$aggregations);
 		
 	    //prevent sql injection here
@@ -931,132 +879,202 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $json->cols = array();
 	    $json->rows = array();
 	    
-	    	
+	    //if not json then we decode as we have always
+	    if ($jsonfields=='') {
+			
+			//$json->cols[] = json_decode('{"id":"topic", "label":"topic", "type":"string"}');
+			
+    	    //add the datetime column or grouping column
+			if (empty($group)) {
+				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
+			}
+			else {
+				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"number"}');
+			}
+			
+
+    	    foreach($topics as $idx=>$topic) {
+    	    	$topic = $this->replaceWordpressUser($topic);
 				
-	    //add the datetime column or grouping column
-		if (empty($group)) {
-			$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
-		}
-		else {
-			$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"number"}');
-		}
-		
-		//add the topic column if not pivoting
-	    if ($pivot=='false') {
-	        $json->cols[] = json_decode('{"id":"topic", "label":"topic", "type":"string"}');
-	        $json->cols[] = json_decode('{"id":"payload", "label":"payload", "type":"string"}');
+				
+    	    	$agg = $aggregations[$idx].'(`payload`) as payload';
+				
+				if (empty($group)) {
+					$sql = $wpdb->prepare("SELECT `utc`,$agg from $table_name
+    	    	 						WHERE topic=%s 
+    	    	 						AND ((utc>=%s OR %s='') 
+    	    	 						AND (utc<=%s OR %s='')) 
+    	    	 						order by utc $order limit %d",
+    	    	 						$topic,
+    	    	 						$from,
+    	    	 						$from,
+    	    	 						$to,
+    	    	 						$to,
+    	    	 						$limit			
+    	    	 				        );
+    	    	 
+				} 
+				else {
+					$sql = $wpdb->prepare("SELECT EXTRACT($group FROM `utc`) as grouping,$agg from $table_name
+    	    	 						WHERE topic=%s 
+    	    	 						AND ((utc>=%s OR %s='') 
+    	    	 						AND (utc<=%s OR %s='')) 
+										GROUP BY grouping
+    	    	 						order by utc $order limit %d",
+    	    	 						$topic,
+    	    	 						$from,
+    	    	 						$from,
+    	    	 						$to,
+    	    	 						$to,
+    	    	 						$limit			
+    	    	 				        );
+    	    	 
+					
+				}
+    	    	 
+    	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
+    	    	
+				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
+
+				
+				$colset = false;
+				
+				foreach($therows as $row) {
+			
+					$o = new stdClass();
+					$o->c = array();
+					
+					//add topic
+					//$o->c[] = json_decode('{"v":"'.$topic.'"}');
+					
+					//add grouping
+					if (empty($group)) {
+						$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
+					}
+					else {
+						$o->c[] = json_decode('{"v":'.$row["grouping"].'}');
+					}
+					
+					//loop through columns
+					for($i = 0; $i < count($topics); ++$i){
+						if ($i==$index) {
+							if (!$colset) {
+								if (is_numeric($row['payload'])) {
+									//add the next column definition
+									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"number"}');	
+								}
+								else {
+									//add the next column definition
+									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"string"}');	
+								}
+								$colset = true;
+							}
+							if (is_numeric($row['payload'])) {
+								$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
+							}
+							else {
+								$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
+							}
+						}
+						else {
+							$o->c[] = json_decode('{"v":null}');  
+						}
+					}	
+					
+					$json->rows[] =$o;
+				} //row
+    	      
+    	    $index++; 
+    	    } //topic	 
+	    }
+	    //we are returning json data....
+	    
+	    else {
+	         $jsonpropsraw = explode(',', $jsonfields);
+	         $jsonprops= array();
+	         $jsontypes= array();
+	         
+	         foreach($jsonpropsraw as $prop) {
+	             $nameandtype = explode('|', $prop);
+	             $jsonprops[] = $nameandtype[0];
+	             if (sizeof($nameandtype)==2) {
+    	         	 $json->cols[] = json_decode('{"id":"'.$nameandtype[0].'", "label":"'.$nameandtype[0].'", "type":"'.$nameandtype[1].'"}');
+    	         	 $jsontypes[] = $nameandtype[1];
+	             }
+	             else {
+	                  $json->cols[] = json_decode('{"id":"'.$nameandtype[0].'", "label":"'.$nameandtype[0].'", "type":"number"}');
+	                  $jsontypes[] = 'number';
+	             }
+	         }
+	         
+	         foreach($topics as $topic) {
+	             	$topic = $this->replaceWordpressUser($topic);
+        	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
+        	    	 						WHERE topic=%s 
+        	    	 						AND ((utc>=%s OR %s='') 
+        	    	 						AND (utc<=%s OR %s='')) 
+        	    	 						order by utc $order limit %d",
+        	    	 						$topic,
+        	    	 						$from,
+        	    	 						$from,
+        	    	 						$to,
+        	    	 						$to,
+        	    	 						$limit			
+        	    	 				        );
+        	    	 
+        	    	 $therows =  $wpdb->get_results(
+        	    	 		$sql		, ARRAY_A );
+					$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
+        	    		    	 
+        	    try
+        	    {
+        	        foreach($therows as $row) {
+            	  		$o = new stdClass();
+            			$o->c = array();
+            			
+            	        $payload =json_decode($row['payload'], true);
+            	        
+            	        for ($col = 0; $col < sizeof($jsonprops); $col++) {
+            	            $prop = $jsonprops[$col];
+                            switch ($jsontypes) {
+                                
+                                case 'datetime':
+                                    $dtm = strtotime($payload[$prop]);
+                                    $o->c[] = json_decode('{"v":"new Date('.$dtm.')"}');   
+                                    break;
+                                case 'number':
+                               
+                                 	$o->c[] = json_decode('{"v":'.$payload[$prop].'}');    
+                                    break;    
+                                case 'string':
+                                    $o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
+                                    break;
+                                default:
+                                    if (is_numeric($payload[$prop])) {
+                		  				$o->c[] = json_decode('{"v":'.$payload[$prop].'}'); 
+                	  				}
+                	  				else {
+                		  				$o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
+                	  				}      
+                                    break;
+                            }
+                        } 
+            	  			
+              		    $json->rows[] =$o;
+        	        }
+        	    }
+        	    catch(Exception $e) {
+        	        Log(DEBUG::ERR,$e->getMessage());
+        	    }
+	        }
 	        
 	    }
-	
-
-	    foreach($topics as $idx=>$topic) {
-			$topic = apply_filters('mqttcogs_topic_pre', $topic);
-		
-			$agg = $aggregations[$idx].'(`payload`) as payload';
-			
-			if (empty($group)) {
-				$sql = $wpdb->prepare("SELECT `utc`,$agg from $table_name
-	    	 						WHERE topic=%s 
-	    	 						AND ((utc>=%s OR %s='') 
-	    	 						AND (utc<=%s OR %s='')) 
-	    	 						order by utc $order limit %d",
-	    	 						$topic,
-	    	 						$from,
-	    	 						$from,
-	    	 						$to,
-	    	 						$to,
-	    	 						$limit			
-	    	 				        );
-	    	 
-			} 
-			else {
-				$sql = $wpdb->prepare("SELECT EXTRACT($group FROM `utc`) as grouping,$agg from $table_name
-	    	 						WHERE topic=%s 
-	    	 						AND ((utc>=%s OR %s='') 
-	    	 						AND (utc<=%s OR %s='')) 
-									GROUP BY grouping
-	    	 						order by utc $order limit %d",
-	    	 						$topic,
-	    	 						$from,
-	    	 						$from,
-	    	 						$to,
-	    	 						$to,
-	    	 						$limit			
-	    	 				        );
-	    	 
-				
-			}
-	    	 
-	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
-			$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
-			$colset = false;
-            $topic = apply_filters('mqttcogs_topic', $topic);
-			
-			foreach($therows as $row) {
-		
-				$o = new stdClass();
-				$o->c = array();
-				
-				//add grouping
-				if (empty($group)) {
-					$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
-				}
-				else {
-					$o->c[] = json_decode('{"v":'.$row["grouping"].'}');
-				}
-				
-				//default is to pivot, each topic is a new column
-				if ($pivot=='true') {
-    				//loop through columns
-    				for($i = 0; $i < count($topics); ++$i){
-    					if ($i==$index) {
-    						if (!$colset) {
-    							if (is_numeric($row['payload'])) {
-    								//add the next column definition
-    								$json->cols[] = json_decode('{"id":"'.$topic.'","type":"number"}');	
-    							}
-    							else {
-    								//add the next column definition
-    								$json->cols[] = json_decode('{"id":"'.$topic.'","type":"string"}');	
-    							}
-    							$colset = true;
-    						}
-    						
-						     if (is_numeric($row['payload']) || ($this->startsWith($row['payload'], '{')) || ($this->startsWith($row['payload'], '['))) {
-        			        	$o->c[] = json_decode('{"v":'.$row['payload'].'}');  
-        				    }
-        				    else {
-        				        $o->c[] = json_decode('{"v":"'.$row['payload'].'"}');
-        				    }
-						
-    					}
-    					else {
-    						$o->c[] = json_decode('{"v":null}');  
-    					}
-    				}	
-				}
-				else {
-				    $o->c[] = json_decode('{"v":"'.$topic.'"}');   
-			         if (is_numeric($row['payload']) || ($this->startsWith($row['payload'], '{')) || ($this->startsWith($row['payload'], '['))) {
-    			        	$o->c[] = json_decode('{"v":'.$row['payload'].'}');  
-    				    }
-    				    else {
-    				        $o->c[] = json_decode('{"v":"'.$row['payload'].'"}');
-    				    }
-					
-			        	
-				}
-				
-				$json->rows[] =$o;
-			} //row
-	      
-	    $index++; 
-	    } //topic	 
-    
+	    
 	   return $json;    
+	
 	}
 	
-
+	
 	public function ajax_data($atts,$content) {
 		if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
 			return '';
@@ -1073,79 +1091,102 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 										 'aggregations' => '',
 										 'group' => '',
 	  									 'order'=>'DESC',
-	  									 'pivot'=>'true'
+	  									 'jsonfields'=>''
 	                                 ], $atts, NULL);
 	   $limit = $atts['limit'];
 	   $topics = $atts['topics'];
 	 
-	   return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"].'&pivot='.$atts["pivot"]);                                                              
+	   return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"].'&jsonfields='.$atts["jsonfields"]);                                                              
 	} 
 	
-	
-	
-	public function shortcodeDrawDataTable($atts, $content) {
-		static $datatables = array();	
-		$this->setupLogging();
-		//we include google scripts here for JSON parsing and datatable support
-		wp_enqueue_script('google_loadecharts');
-	    wp_enqueue_script('loadgoogle');
-	  
-	    //leaflet libraries
-	    wp_enqueue_style('datatablescss');
-	    wp_enqueue_script('datatables');
-		wp_enqueue_script('datatablesdrawer');	
-		
-		$atts = array_change_key_case((array)$atts, CASE_LOWER);
-		$id = uniqid();
-		
-		$atts = shortcode_atts([
-	                           'height' => '180px',
-							   'width' =>'',
-	                           'options' => '{}',
-					           'refresh_secs'=>0,
-							   'script' => ''
-	                       ], $atts, NULL);
-		
-		$options = $atts["options"];
-		$height = $atts["height"];
-		$width = $atts["width"];
-		$refresh_secs = $atts["refresh_secs"];
-		
-		//$prescript = $atts["script"];
-		$prescript='';
-		
-		if ($atts["script"]!=='') {
-			global $post;
-			//$post->ID; 
-			$prescript = get_post_meta($post->ID, $atts["script"], true);
-			$prescript = str_replace(array('\r', '\n', '\t'), '', trim($prescript));	
-		}
-	
-		global $wp_scripts;
-		$content = str_replace('mqttcogs_', 'mqttcogs_ajax_', $content);
-		$content= strip_tags($content);
-		$content = trim($content);
-		$content = str_replace(array('\r', '\n'), '', trim($content));	
-
-		$content = strip_tags(do_shortcode($content));
-		$querystring =  str_replace(array("\r", "\n"), '', $content);
-
-		$script = '<div><table id="'.$id.'" style="height:'.$atts['height'].'"><thead><tr></tr></thead><tbody></tbody></table></div>';
-	
-
+	/*
+	public function shortcodeDrawGoogle2($atts,$content) {
 	 
-	    $datatables[] = array(
-  	     "id"=>$id,
-  	     "refresh_secs"=>$refresh_secs,
-  	     "options"=> $options,
-  	     "querystring"=>$querystring,
-		 "script"=>$prescript
-  	    );
-  	    
-        $wp_scripts->add_data('datatablesdrawer', 'data', '');
-    	wp_localize_script( 'datatablesdrawer', 'alltables', $datatables);
+	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
+ 
+ 	  
+	  $atts = shortcode_atts([
+	                                     'charttype' => 'LineChart',
+	                                     'options' => '{"width":400,"height":300}',
+					     'refresh_secs'=>60,
+					     'query'=>'SELECT utc,payload LIMIT 1'
+	                                 ], $atts, NULL);
+	
+	$script = '';// 'monkey'.$atts['query'];
+	$id = uniqid();
+        $options = $atts["options"];
+        $charttype = $atts["charttype"];
+	$refresh_secs = $atts["refresh_secs"];
+	$query = explode('|', urldecode($atts["query"]));
+	
+	$querystring =  $this->getAjaxUrl('doSQL');   
+
+	$script = $script.'
+	 <div id="'.$id.'">
+	 <script type="text/javascript">
+		google.charts.setOnLoadCallback(drawChart'.$id.');
+
+		function drawChart'.$id.'() {
+
+	        var allresults=[];
+	        allresults.length = '.count($query).';';
+	      
+	        
+	for ($queryid = 0; $queryid  <= count($query)-1; $queryid ++) {
+  		 $script = $script.'var query = new google.visualization.Query("'.$querystring.'");
+  		  allresults['.$queryid.'] =undefined;
+  		  query.setQuery("'.$query[$queryid].'");
+  		   query.send(function (response) {
+       				  handleResponse'.$id.'(response, '.$queryid.');
+			    }); 
+  		   
+  		   if ('.$refresh_secs.'>0) {
+		     	query.setRefreshInterval('.$refresh_secs.');
+		   }';
+	 }
+	
+	$script = $script.'	   
+  	
+  	 	  
+  		   function handleResponse'.$id.'(response, id) {
+			if (response.isError()) {
+	    			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());
+	     			return;
+		        }
+	
+		   	allresults[id] = response.getDataTable();	 
+			
+			//if all are loaded then we join them
+			for(var idx=0;idx<allresults.length-1;idx++){
+				if (!allresults[idx]) {
+					return;
+				}	
+			}   	
+			var joinedData = allresults[0];
+
+
+			var columns = [];
+			if (allresults.length>1) {
+				$.each(allresults, function (index, datatable) {
+			        if (index != 0) {
+			            columns.push(index);
+			            joinedData = google.visualization.data.join(joinedData, datatable, "full", [[0, 0]], columns, [1]);
+			        }
+			    });
+			}
+	   	
+	   		var chart = new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
+			chart.draw(joinedData , '.$options.');
+	   		
+	   	  
+	  
+	      } //handlerespoonse
+	      }//drawchart
+	    </script></div>';
+	   
     	return $script;	
-	}
+	}*/
+	
 	
 	public function shortcodeDrawLeaflet($atts, $content) {
 		static $leafletmaps = array();	
@@ -1195,7 +1236,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$content = strip_tags(do_shortcode($content));
 		$querystring =  str_replace(array("\r", "\n"), '', $content);
 
-		$script = '<div><div id="'.$id.'" style="height:'.$atts['height'].'"/></div>';
+		$script = '<div id="'.$id.'" style="height:'.$atts['height'].'">';
 	 
 	    $leafletmaps[] = array(
   	     "id"=>$id,
@@ -1223,7 +1264,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  wp_enqueue_script('loadgoogle');
 			
  	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
- 
+  		Debug::Log(DEBUG::INFO, "Attrs {$atts['charttype']}");
 	  $atts = shortcode_atts([
 	                           'charttype' => 'LineChart',
 	                            'options' => '{"width":400,"height":300}',
@@ -1231,6 +1272,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 								'script' => ''
 	                       ], $atts, NULL);
 	
+		 
 		
 	$id = uniqid();
     $options = $atts["options"];
@@ -1275,7 +1317,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 
 	function getGoogleLoadJS($charttype) {
-		return 	 'google.charts.load("current", {"packages":["corechart","bar","table","gauge","map"]});';
+		return 	 'google.charts.load("current", {"packages":["imagesparkline","corechart","bar","table","gauge","map"]});';
 
 	}
 	
@@ -1332,7 +1374,6 @@ class MySubscribeCallback extends MessageHandler
 			$utc = date_format($datetime, 'Y-m-d H:i:s');
  			
 			//deal with smartsleep nodes
-			// mysensors_out/10/255/3/0/32
 			if ($this->mqttcogs_plugin->endsWith($publish_object->getTopic(), '/255/3/0/32')) {				
 				$pieces = explode("/", $publish_object->getTopic());
 				$nodeid = $pieces[1];
@@ -1340,6 +1381,8 @@ class MySubscribeCallback extends MessageHandler
 				
 				//node is online so....
 				//TO DO BETTER CHECK HERE
+					
+				
 				$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
 				$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10, 'ASC');
 				
@@ -1357,50 +1400,22 @@ class MySubscribeCallback extends MessageHandler
 				}
 			}
 			
-			$result = false;
-		    if ($publish_object->getRetain() == 1) {
-	       		Debug::Log(DEBUG::INFO,'MSG IS RETAINED');
-	
-		        //attempt to update
-		        $result = $wpdb->update( 
-                	$tableName, 
-                	array(
-							'utc' => $utc,
-							'payload' => $publish_object->getMessage(),
-					),
-                	array(
-                	    'topic' => $publish_object->getTopic(),
-                	    'retain' => 1), 
-                	array( 
-                		'%s',
-                		'%s'
-                	),
-                	array( '%s','%d' ) 
-                );
-            	Debug::Log(DEBUG::INFO,'Result:'.$result);
-		    }
 		
-		    //if we didn't manage to update, then just insert
-		    //be really careful here. If the update doesn't change
-		    //the data then 0 is returned.....ARRRG
-		    if (false===$result) {
-		        Debug::Log(DEBUG::INFO,'INSERTING:');
-    			$wpdb->insert(
-    					$tableName,
-    					array(
-    							'utc' => $utc,
-    							'topic' => $publish_object->getTopic(),
-    							'payload' => $publish_object->getMessage(),
-    							'qos' =>$publish_object->getQos(),
-    							'retain' => $publish_object->getRetain()
-    					),
-    					array(
-    							'%s',
-    							'%s',
-    							'%s'
-    					)
-    				);
-		    }
+			$wpdb->insert(
+					$tableName,
+					array(
+							'utc' => $utc,
+							'topic' => $publish_object->getTopic(),
+							'payload' => $publish_object->getMessage(),
+							'qos' =>$publish_object->getQos(),
+							'retain' => $publish_object->getRetain()
+					),
+					array(
+							'%s',
+							'%s',
+							'%s'
+					)
+					);
 			
 			do_action_ref_array(
 								'after_mqttcogs_msg_in',
