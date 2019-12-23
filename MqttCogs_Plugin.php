@@ -2,6 +2,7 @@
 require(__DIR__ . '/./sskaje/autoload.example.php');
 require(__DIR__ . '/./flock/Lock.php');
 
+
 //require_once __DIR__ . '/./AutoLoadByNamespace.php';
 
 //spl_autoload_register("AutoloadByNamespace::autoload");
@@ -23,20 +24,21 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     public function activate() {
         Debug::Log(DEBUG::INFO,"MqttCogs plugin activated");		
 		
-		if (! wp_next_scheduled ( 'mqtt_cogs_watchdog' )) {
-			wp_schedule_event(time(), '1min', 'mqtt_cogs_watchdog');
+		
+		if (! wp_next_scheduled ($this->prefixTableName('watchdog'))) {
+			wp_schedule_event(time(), '1min', $this->prefixTableName('watchdog'));
 	    }
 
-	    if (! wp_next_scheduled ( 'mqtt_cogs_prune' )) {
-			wp_schedule_event(time(), 'daily', 'mqtt_cogs_prune');
+	    if (! wp_next_scheduled ($this->prefixTableName('prune') )) {
+			wp_schedule_event(time(), 'daily',$this->prefixTableName('prune'));
 	    }
     }
     
     //called when the plugin is deactivated
     public function deactivate() {
-		wp_clear_scheduled_hook('mqtt_cogs_watchdog');
-		delete_transient( 'doing_mqtt' );
-		wp_clear_scheduled_hook('mqtt_cogs_prune');
+		wp_clear_scheduled_hook($this->prefixTableName('watchdog'));
+	//	delete_transient( 'doing_mqtt' );
+		wp_clear_scheduled_hook($this->prefixTableName('prune'));
 				
 		try {
 		      $file = './'.$this->prefixTableName('lock.pid');	
@@ -214,10 +216,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	
 	    //makes sure mqtt reader is active
-	    add_action('mqtt_cogs_watchdog', array(&$this, 'do_mqtt_watchdog'));
+	    add_action($this->prefixTableName('watchdog'), array(&$this, 'do_mqtt_watchdog'));
 	    
 	    //prunes the database
-	    add_action('mqtt_cogs_prune', array(&$this, 'do_mqtt_prune'));
+	    add_action($this->prefixTableName('prune'), array(&$this, 'do_mqtt_prune'));
 
 
         // Adding scripts & styles to all pages
@@ -233,8 +235,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	 
     	 add_shortcode('mqttcogs_drawgoogle', array($this, 'shortcodeDrawGoogle'));
     	 
-		 //this is not completed yet
 		 add_shortcode('mqttcogs_drawleaflet', array($this, 'shortcodeDrawLeaflet'));
+		 
+		 add_shortcode('mqttcogs_drawHTML', array($this, 'shortcodeDrawHTML'));
+		 
+	     //this is not completed yet
+		 add_shortcode('mqttcogs_drawdatatable', array($this, 'shortcodeDrawDataTable'));
+	
 			 
 		 //this is experimental
 		 add_shortcode('mqttcogs_graph', array($this, 'shortcodeDrawGoogle2'));
@@ -259,15 +266,23 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
    	   	 
 	public function enqueueStylesAndScripts() {
 		
+		
+		wp_register_script('moment', 'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment-with-locales.min.js');
+				
+				
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '2.2');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '2.2112');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.2');
-		
-		
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.2112');
+
+		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.2112');
+				
+		wp_register_style('datatablescss', 'https://cdn.datatables.net/1.10.19/css/jquery.dataTables.min.css');
+		wp_register_script('datatables', 'https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js');
+		wp_register_script('datatablesdrawer', plugins_url('/js/datatablesdrawer.js', __FILE__), array(), '2.43');		
 	}
 
     //prunes the mqttcogs database table. Run daily
@@ -529,10 +544,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	$payload = $_GET['payload'];
     	$retained = (int) $_GET['retained'];
     	$minrole = $_GET['minrole'];
-    	$pattern = $_GET['pattern'];
+    	//$pattern = $_GET['pattern'];
     	$id =  $_GET['id'];
     
-    	$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole&pattern=$pattern";
+				   //"doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
+    	$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
 
     	if (!check_ajax_referer($action, 'wpn')) {
     		die();
@@ -577,7 +593,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    }*/
 	    
 	       
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order'],$_GET['jsonfields']);    
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order']);    
 	  
 	    $json = new stdClass();        
 	    $json->status = 'ok';
@@ -664,7 +680,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$label = $atts['label_text'];
 		
-		$button_text = $atts['button_text'];
 		$input_title = $atts['input_title']==''?"":"title='".$atts['input_title']."'";
 		$input_pattern = $atts['input_pattern']==''?"":"pattern='".$atts['input_pattern']."'";
 		$input_type = ($atts['input_type']=='')?"":"type='".$atts['input_type']."'";
@@ -672,7 +687,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$input_max = $atts['input_max']==''?"":"max='".$atts['input_max']."'";
 		$input_step = $atts['input_step']==''?"":"step='".$atts['input_step']."'";
 		
-		$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole&pattern=$pattern";
+		$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
+	//	$action = "doSet&
+		
 		$wpn = wp_create_nonce($action);
 		$action = "$action&wpn=$wpn&payload=";
 	
@@ -810,12 +827,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                     'to'=>'',
 										 'aggregations' =>'',
 										 'group' => '',
-	  									 'order'=>'DESC',
-	  									 'jsonfields'=>''
+	  									 'order'=>'DESC'
 	                                 ], $atts, NULL);
 
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order'],$atts['jsonfields']);	
+		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order']);	
 		$jsonret = json_encode($table);   
 	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	   $jsonret = str_replace('DEND"', '', $jsonret);
@@ -852,7 +868,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$wpdb->delete( $table_name, array( 'id' => $id ) );
 	}
 	
-	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC', $jsonfields='') {
+	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC') {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('data');	
 	  
@@ -880,7 +896,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $json->rows = array();
 	    
 	    //if not json then we decode as we have always
-	    if ($jsonfields=='') {
+	   // if ($jsonfields=='') {
 			
 			//$json->cols[] = json_decode('{"id":"topic", "label":"topic", "type":"string"}');
 			
@@ -896,8 +912,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    foreach($topics as $idx=>$topic) {
     	    	$topic = $this->replaceWordpressUser($topic);
 				
-				
-    	    	$agg = $aggregations[$idx].'(`payload`) as payload';
+				$agg = ($idx<count($aggregations))?$aggregations[$idx].'(`payload`) as payload':'`payload` as payload';
 				
 				if (empty($group)) {
 					$sql = $wpdb->prepare("SELECT `utc`,$agg from $table_name
@@ -986,9 +1001,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	      
     	    $index++; 
     	    } //topic	 
-	    }
+	   // }
 	    //we are returning json data....
 	    
+		/*
 	    else {
 	         $jsonpropsraw = explode(',', $jsonfields);
 	         $jsonprops= array();
@@ -1068,7 +1084,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         	    }
 	        }
 	        
-	    }
+	    }*/
 	    
 	   return $json;    
 	
@@ -1090,104 +1106,81 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                     'to'=>'',
 										 'aggregations' => '',
 										 'group' => '',
-	  									 'order'=>'DESC',
-	  									 'jsonfields'=>''
+	  									 'order'=>'DESC'
 	                                 ], $atts, NULL);
 	   $limit = $atts['limit'];
 	   $topics = $atts['topics'];
 	 
-	   return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"].'&jsonfields='.$atts["jsonfields"]);                                                              
+	   return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"]);                                                              
 	} 
 	
-	/*
-	public function shortcodeDrawGoogle2($atts,$content) {
-	 
-	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
- 
- 	  
-	  $atts = shortcode_atts([
-	                                     'charttype' => 'LineChart',
-	                                     'options' => '{"width":400,"height":300}',
-					     'refresh_secs'=>60,
-					     'query'=>'SELECT utc,payload LIMIT 1'
-	                                 ], $atts, NULL);
 	
-	$script = '';// 'monkey'.$atts['query'];
-	$id = uniqid();
-        $options = $atts["options"];
-        $charttype = $atts["charttype"];
-	$refresh_secs = $atts["refresh_secs"];
-	$query = explode('|', urldecode($atts["query"]));
 	
-	$querystring =  $this->getAjaxUrl('doSQL');   
-
-	$script = $script.'
-	 <div id="'.$id.'">
-	 <script type="text/javascript">
-		google.charts.setOnLoadCallback(drawChart'.$id.');
-
-		function drawChart'.$id.'() {
-
-	        var allresults=[];
-	        allresults.length = '.count($query).';';
-	      
-	        
-	for ($queryid = 0; $queryid  <= count($query)-1; $queryid ++) {
-  		 $script = $script.'var query = new google.visualization.Query("'.$querystring.'");
-  		  allresults['.$queryid.'] =undefined;
-  		  query.setQuery("'.$query[$queryid].'");
-  		   query.send(function (response) {
-       				  handleResponse'.$id.'(response, '.$queryid.');
-			    }); 
-  		   
-  		   if ('.$refresh_secs.'>0) {
-		     	query.setRefreshInterval('.$refresh_secs.');
-		   }';
-	 }
-	
-	$script = $script.'	   
-  	
-  	 	  
-  		   function handleResponse'.$id.'(response, id) {
-			if (response.isError()) {
-	    			alert("Error in query: " + response.getMessage() + " " + response.getDetailedMessage());
-	     			return;
-		        }
-	
-		   	allresults[id] = response.getDataTable();	 
-			
-			//if all are loaded then we join them
-			for(var idx=0;idx<allresults.length-1;idx++){
-				if (!allresults[idx]) {
-					return;
-				}	
-			}   	
-			var joinedData = allresults[0];
-
-
-			var columns = [];
-			if (allresults.length>1) {
-				$.each(allresults, function (index, datatable) {
-			        if (index != 0) {
-			            columns.push(index);
-			            joinedData = google.visualization.data.join(joinedData, datatable, "full", [[0, 0]], columns, [1]);
-			        }
-			    });
-			}
-	   	
-	   		var chart = new google.visualization.'.$charttype.'(document.getElementById("'.$id.'"));
-			chart.draw(joinedData , '.$options.');
-	   		
-	   	  
+	public function shortcodeDrawDataTable($atts, $content) {
+		static $datatables = array();	
+		$this->setupLogging();
+		//we include google scripts here for JSON parsing and datatable support
+		wp_enqueue_script('google_loadecharts');
+	    wp_enqueue_script('loadgoogle');
 	  
-	      } //handlerespoonse
-	      }//drawchart
-	    </script></div>';
-	   
+	    //leaflet libraries
+	    wp_enqueue_style('datatablescss');
+	    wp_enqueue_script('datatables');
+		wp_enqueue_script('datatablesdrawer');	
+		
+		$atts = array_change_key_case((array)$atts, CASE_LOWER);
+		$id = uniqid();
+		
+		$atts = shortcode_atts([
+	                           'height' => '180px',
+							   'width' =>'',
+	                           'options' => '{}',
+					           'refresh_secs'=>0,
+							   'script' => ''
+	                       ], $atts, NULL);
+		
+		$options = $atts["options"];
+		$height = $atts["height"];
+		$width = $atts["width"];
+		$refresh_secs = $atts["refresh_secs"];
+		
+		//$prescript = $atts["script"];
+		$prescript='';
+		
+		if ($atts["script"]!=='') {
+			global $post;
+			//$post->ID; 
+			$prescript = get_post_meta($post->ID, $atts["script"], true);
+			$prescript = str_replace(array('\r', '\n', '\t'), '', trim($prescript));	
+		}
+	
+		global $wp_scripts;
+		$content = str_replace('mqttcogs_', 'mqttcogs_ajax_', $content);
+		$content= strip_tags($content);
+		$content = trim($content);
+		$content = str_replace(array('\r', '\n'), '', trim($content));	
+
+		$content = strip_tags(do_shortcode($content));
+		$querystring =  str_replace(array("\r", "\n"), '', $content);
+
+		$script = '<div><table id="'.$id.'" style="height:'.$atts['height'].'"><thead><tr></tr></thead><tbody></tbody></table></div>';
+	
+
+	 
+	    $datatables[] = array(
+  	     "id"=>$id,
+  	     "refresh_secs"=>$refresh_secs,
+  	     "options"=> $options,
+  	     "querystring"=>$querystring,
+		 "script"=>$prescript
+  	    );
+  	    
+        $wp_scripts->add_data('datatablesdrawer', 'data', '');
+    	wp_localize_script( 'datatablesdrawer', 'alltables', $datatables);
     	return $script;	
-	}*/
-	
-	
+	}
+
+
 	public function shortcodeDrawLeaflet($atts, $content) {
 		static $leafletmaps = array();	
 		$this->setupLogging();
@@ -1252,7 +1245,75 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	return $script;	
 	}
 	
-	//////
+	
+	public function shortcodeDrawHTML($atts,$content) {
+      $this->setupLogging();
+	  
+	  if (!$this->canUserDoRoleOption('MQTT_ReadAccessRole')) {
+			return '';
+	  }
+		
+	  static $htmls = array();	
+	 
+	  //only include google stuff for this shortcode
+	  wp_enqueue_script('google_loadecharts');
+	  wp_enqueue_script('loadgoogle');
+			
+ 	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
+  	
+	  $atts = shortcode_atts([
+				'limit' => '1',
+				'topics' => '#',
+				'from'=>'',
+				'to'=>'',
+				'aggregations' => '',
+				'group' => '',
+				'order'=>'DESC',
+				'local'=>'false',
+				'refresh_secs'=>0,
+				'script' => '',
+				'dateformat' => '',
+				'action' => 'doGetTopN'
+		], $atts, NULL);
+		
+		$id = uniqid();
+		$refresh_secs = $atts["refresh_secs"];
+		$prescript='';
+
+		if ($atts["script"]!=='') {
+				global $post;
+				$prescript = get_post_meta($post->ID, $atts["script"], true);
+				$prescript = str_replace(array('\r', '\n', '\t'), '', trim($prescript));	
+			}
+	
+		wp_enqueue_script('moment');
+  		
+		wp_enqueue_script('htmldrawer');
+  	
+		global $wp_scripts;
+	 
+	   $limit = $atts['limit'];
+	   $topics = $atts['topics'];
+	 
+	   $querystring = $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"]);
+	   
+		$script = '
+		 <div id="'.$id.'"></div>';
+		 
+		 $htmls[] = array(
+			 "id"=>$id,
+			 "refresh_secs"=>$refresh_secs,
+			 "querystring"=>$querystring,
+			 "content"=>$content,
+			 "dateformat"=>$atts['dateformat'],
+			 "script"=>$prescript
+			);
+			
+			$wp_scripts->add_data('htmldrawer', 'data', '');
+			wp_localize_script( 'htmldrawer', 'allhtmls', $htmls );
+			return $script;	
+	}
+
 
 	public function shortcodeDrawGoogle($atts,$content) {
       $this->setupLogging();
@@ -1264,7 +1325,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  wp_enqueue_script('loadgoogle');
 			
  	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
-  		Debug::Log(DEBUG::INFO, "Attrs {$atts['charttype']}");
+  	//	Debug::Log(DEBUG::INFO, "Attrs {$atts['charttype']}");
 	  $atts = shortcode_atts([
 	                           'charttype' => 'LineChart',
 	                            'options' => '{"width":400,"height":300}',
