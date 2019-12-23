@@ -547,8 +547,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	//$pattern = $_GET['pattern'];
     	$id =  $_GET['id'];
     
-				   //"doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
-    	$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
+    	$action = "doSet&id=$id&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
 
     	if (!check_ajax_referer($action, 'wpn')) {
     		die();
@@ -666,7 +665,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			$currentvalue = $atts['input_value'];
 		}
 		
-		$id =uniqid();
+		$id =$atts['id'];
 		$class = $atts['class'];
 		$topic =  $this->replaceWordpressUser($atts['topic']);
 	
@@ -687,9 +686,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$input_max = $atts['input_max']==''?"":"max='".$atts['input_max']."'";
 		$input_step = $atts['input_step']==''?"":"step='".$atts['input_step']."'";
 		
-		$action = "doSet&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
-	//	$action = "doSet&
-		
+		$action = "doSet&id=$id&topic=$topic&qos=$qos&retained=$retained&minrole=$minrole";
 		$wpn = wp_create_nonce($action);
 		$action = "$action&wpn=$wpn&payload=";
 	
@@ -715,23 +712,23 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$script = "
 	 	<div id='$id' class='$class'>
-	 		<input id='mqttcogs_set_$id' value='$currentvalue' $input_type $input_title $input_pattern $input_min $input_max $input_step onchange='setMQTTData$id()' $checked>
-			<label for='mqttcogs_set_$id'>$label<span class='sw'></span></label>	
+	 		<input id='input_$id' value='$currentvalue' $input_type $input_title $input_pattern $input_min $input_max $input_step onchange='setMQTTData$id()' $checked>
+			<label for='input_$id'>$label<span class='sw'></span></label>	
 			
 	 	 	<script type='text/javascript'>
 	    		
 	      	function setMQTTData$id() {
 	      		
-	      		if (jQuery('#mqttcogs_set_$id')[0].checkValidity()) { 				
-					var val = (document.getElementById('mqttcogs_set_$id')).value;
+	      		if (jQuery('#input_$id')[0].checkValidity()) { 				
+					var val = (document.getElementById('input_$id')).value;
 					
 					//if it is a checkbox we decide how to proceed here
-					if (document.getElementById('mqttcogs_set_$id').type=='checkbox') {
+					if (document.getElementById('input_$id').type=='checkbox') {
 						if (isNaN(val)) {
-							val = document.getElementById('mqttcogs_set_$id').checked?'true':'false';
+							val = document.getElementById('input_$id').checked?'true':'false';
 						}
 						else {
-							val = document.getElementById('mqttcogs_set_$id').checked?1:0;
+							val = document.getElementById('input_$id').checked?1:0;
 						}
 					}
 					
@@ -895,11 +892,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $json->cols = array();
 	    $json->rows = array();
 	    
-	    //if not json then we decode as we have always
-	   // if ($jsonfields=='') {
-			
-			//$json->cols[] = json_decode('{"id":"topic", "label":"topic", "type":"string"}');
-			
+	   	
     	    //add the datetime column or grouping column
 			if (empty($group)) {
 				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
@@ -1001,90 +994,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	      
     	    $index++; 
     	    } //topic	 
-	   // }
-	    //we are returning json data....
-	    
-		/*
-	    else {
-	         $jsonpropsraw = explode(',', $jsonfields);
-	         $jsonprops= array();
-	         $jsontypes= array();
-	         
-	         foreach($jsonpropsraw as $prop) {
-	             $nameandtype = explode('|', $prop);
-	             $jsonprops[] = $nameandtype[0];
-	             if (sizeof($nameandtype)==2) {
-    	         	 $json->cols[] = json_decode('{"id":"'.$nameandtype[0].'", "label":"'.$nameandtype[0].'", "type":"'.$nameandtype[1].'"}');
-    	         	 $jsontypes[] = $nameandtype[1];
-	             }
-	             else {
-	                  $json->cols[] = json_decode('{"id":"'.$nameandtype[0].'", "label":"'.$nameandtype[0].'", "type":"number"}');
-	                  $jsontypes[] = 'number';
-	             }
-	         }
-	         
-	         foreach($topics as $topic) {
-	             	$topic = $this->replaceWordpressUser($topic);
-        	    	 $sql = $wpdb->prepare("SELECT `utc`,`payload` from $table_name
-        	    	 						WHERE topic=%s 
-        	    	 						AND ((utc>=%s OR %s='') 
-        	    	 						AND (utc<=%s OR %s='')) 
-        	    	 						order by utc $order limit %d",
-        	    	 						$topic,
-        	    	 						$from,
-        	    	 						$from,
-        	    	 						$to,
-        	    	 						$to,
-        	    	 						$limit			
-        	    	 				        );
-        	    	 
-        	    	 $therows =  $wpdb->get_results(
-        	    	 		$sql		, ARRAY_A );
-					$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
-        	    		    	 
-        	    try
-        	    {
-        	        foreach($therows as $row) {
-            	  		$o = new stdClass();
-            			$o->c = array();
-            			
-            	        $payload =json_decode($row['payload'], true);
-            	        
-            	        for ($col = 0; $col < sizeof($jsonprops); $col++) {
-            	            $prop = $jsonprops[$col];
-                            switch ($jsontypes) {
-                                
-                                case 'datetime':
-                                    $dtm = strtotime($payload[$prop]);
-                                    $o->c[] = json_decode('{"v":"new Date('.$dtm.')"}');   
-                                    break;
-                                case 'number':
-                               
-                                 	$o->c[] = json_decode('{"v":'.$payload[$prop].'}');    
-                                    break;    
-                                case 'string':
-                                    $o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
-                                    break;
-                                default:
-                                    if (is_numeric($payload[$prop])) {
-                		  				$o->c[] = json_decode('{"v":'.$payload[$prop].'}'); 
-                	  				}
-                	  				else {
-                		  				$o->c[] = json_decode('{"v":"'.$payload[$prop].'"}');   
-                	  				}      
-                                    break;
-                            }
-                        } 
-            	  			
-              		    $json->rows[] =$o;
-        	        }
-        	    }
-        	    catch(Exception $e) {
-        	        Log(DEBUG::ERR,$e->getMessage());
-        	    }
-	        }
-	        
-	    }*/
 	    
 	   return $json;    
 	
