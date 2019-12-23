@@ -457,7 +457,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		return false;
 	}
 	
-	public function bufferMessage($utc, $topic,$payload,$qos,$retained) {
+	public function bufferMessage($topic,$payload,$qos,$retained) {
 		global $wpdb;
 		$tableName = $this->prefixTableName('buffer');
 		$utc = current_time( 'mysql', true );
@@ -488,7 +488,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 		if ($trybuffer) {
 			if (!$this->isNodeOnline($topic, $this->getOption('MQTT_MySensorsRxTopic', 'mysensors_out'))) {
-				$this->bufferMessage($utc, $topic,$payload,$qos,$retained);	
+				$this->bufferMessage($topic,$payload,$qos,$retained);	
 				$json->status = 'buffered';
 				return true;
 			}
