@@ -326,6 +326,7 @@ class MqttCogs_OptionsManager {
                 if ($optionMetaData != null) {
                     foreach ($optionMetaData as $aOptionKey => $aOptionMeta) {
                         $displayText = is_array($aOptionMeta) ? $aOptionMeta[0] : $aOptionMeta;
+				
                         ?>
                             <tr valign="top">
                                 <th scope="row"><p><label for="<?php echo $aOptionKey ?>"><?php echo $displayText ?></label></p></th>
@@ -375,7 +376,7 @@ class MqttCogs_OptionsManager {
         else { // Simple input field
             ?>
             <p><input type="text" name="<?php echo $aOptionKey ?>" id="<?php echo $aOptionKey ?>"
-                      value="<?php echo esc_attr($savedOptionValue) ?>" size="50"/></p>
+                      value="<?php echo wp_unslash($savedOptionValue) ?>" size="50"/></p>
             <?php
 
         }

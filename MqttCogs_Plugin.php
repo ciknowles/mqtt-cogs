@@ -37,7 +37,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     //called when the plugin is deactivated
     public function deactivate() {
 		wp_clear_scheduled_hook($this->prefixTableName('watchdog'));
-	//	delete_transient( 'doing_mqtt' );
 		wp_clear_scheduled_hook($this->prefixTableName('prune'));
 				
 		try {
@@ -83,7 +82,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             'MQTT_Debug' => array(__('MQTT Debug', 'mqttcogs'), 'All', 'Info', 'None'),
         		      	
         	'MQTT_ReadAccessRole' => $readroles,
-        	'MQTT_WriteAccessRole' => $writeroles
+        	'MQTT_WriteAccessRole' => $writeroles,
+			'MQTT_GVisOptions' => array(__('Google Visualization Global Options', 'mqttcogs')),
+			'MQTT_LeafOptions' => array(__('Leaflet Visualization Global Options', 'mqttcogs')),
+			
         );
     }
 
@@ -94,6 +96,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             foreach ($options as $key => $arr) {
                 if (is_array($arr) && count($arr > 1)) {
                     $this->addOption($key, $arr[1]);
+                }
+                else {
+                    switch($key) {
+                        case 'MQTT_GVisOptions':
+                            $this->addOption($key,"{hAxis:{titleTextStyle:{color:'#607d8b'},textStyle:{color:'#b0bec5'}},vAxis:{gridlines:{color:'#37474f'},baselineColor:'transparent'},legend:{position:'top',alignment:'center',textStyle:{color:'#607d8b'}},colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4','#009688','#4caf50','#8bc34a','#cddc39'],areaOpacity:0.24,lineWidth:1,backgroundColor:'transparent',pieSliceBorderColor:'#263238',pieSliceTextStyle:{color:'#607d8b'},pieHole:0.9,bar:{groupWidth:'40'},colorAxis:{colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4']},backgroundColor:'transparent',datalessRegionColor:'#37474f',displayMode:'regions', cssClassNames:{'headerRow': 'cssHeaderRow','tableRow': 'cssTableRow','oddTableRow':'cssOddTableRow','selectedTableRow': 'cssSelectedTableRow','hoverTableRow': 'cssHoverTableRow','headerCell': 'cssHeaderCell','tableCell': 'cssTableCell','rowNumberCell': 'cssRowNumberCell'}}" );
+                        break;
+                        
+                    }
+                    
                 }
             }
         }
@@ -208,8 +219,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         //            wp_enqueue_script('my-script', plugins_url('/js/my-script.js', __FILE__));
         //            wp_enqueue_style('my-style', plugins_url('/css/my-style.css', __FILE__));
         //        }
-
-
+		
         // Add Actions & Filters
         // http://plugin.michael-simpson.com/?page_id=37
     	add_action('wp_enqueue_scripts', array(&$this, 'enqueueStylesAndScripts'));
@@ -228,8 +238,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         //        wp_enqueue_style('my-style', plugins_url('/css/my-style.css', __FILE__));
         //        fwp_enqueue_script('my-script', plugins_url('/js/my-script.js', __FILE__));
 
-	    //  wp_enqueue_script('googlecharts','https://www.gstatic.com/charts/loader.js', __FILE__ );
-
+	
+		
+	
         // Register short codes
         // http://plugin.michael-simpson.com/?page_id=39
 	 
@@ -262,17 +273,245 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	
     	add_action('wp_ajax_doSet', array(&$this, 'ajaxACTION_doSet'));
     	add_action('wp_ajax_nopriv_doSet', array(&$this, 'ajaxACTION_doSet'));
+		
+		//experimental
+		add_action( 'init',array(&$this, 'cptui_register_my_cpts_things' ));
+		
+		add_action( 'add_meta_boxes', array(&$this, 'mqttcogs_custom_meta' ));
+		
+		add_action( 'save_post',array(&$this,  'mqttcogs_meta_save'), 10, 3 );
+		
+		//add_filter( 'content_save_pre',array(&$this, 'mqttcogs_content_save_pre', 10, 1 );
+
+		//add_filter( 'default_content', array(&$this,'my_editor_content'), 10, 2 );
+ 		
+	//	add_filter( 'single_template', array(&$this,'load_single_template'));
    	}
+	//NOT USED 
+	function load_single_template( $template ) {    
+		global $post;
+
+		if ( 'thing' === $post->post_type && locate_template( array( 'single-thing.php' ) ) !== $template ) {
+			/*
+			 * This is a 'movie' post
+			 * AND a 'single movie template' is not found on
+			 * theme or child theme directories, so load it
+			 * from our plugin directory.
+			 */
+			return plugin_dir_path( __FILE__ ) . 'single-thing.php';
+		}
+		return $template;
+	}
+
+
+	/* Adds a meta box to the post editing screen*/
+	function mqttcogs_custom_meta() {
+		add_meta_box( 'mqttcogs_meta', __( 'Thing Properties', 'mqttcogs-textdomain' ),  array(&$this, 'mqttcogs_meta_callback'), 'thing','advanced' );
+	}
+	
+	/**
+	 * Outputs the content of the meta box
+	 */
+	function mqttcogs_meta_callback( $post ) {
+		wp_nonce_field( basename( __FILE__ ), 'mqttcogs_nonce' );
+
+		$mqttcogs_stored_meta = get_post_meta( $post->ID );
+		
+
+		//array_merge
+		
+		$checked = 'checked="checked"';
+		?>
+	 
+	 <table class="form-table" role="presentation">
+		<tbody>		
+		<tr>
+			<th scope="row"><label for="meta-topic" class="mqttcogs-row-title"><?php _e( 'MQTT Topic', 'mqttcogs-textdomain' )?></label></th>
+			<td><input class="regular-text" type="text" name="meta-topic" id="meta-topic" value="<?php if ( isset ( $mqttcogs_stored_meta['meta-topic'] ) ) echo $mqttcogs_stored_meta['meta-topic'][0]; ?>" />
+			</td>
+		</tr>
+
+		<tr>
+			<th scope="row"><label for="meta-lnglat" class="mqttcogs-row-title"><?php _e( 'Longitude,Latitude', 'mqttcogs-textdomain' )?></label></th>
+			<td>	<input class="regular-text" type="text" name="meta-lnglat" id="meta-lnglat" value="<?php if ( isset ( $mqttcogs_stored_meta['meta-lnglat'] ) ) echo $mqttcogs_stored_meta['meta-lnglat'][0]; ?>" />
+			</td>
+		</tr>
+		
+		<tr>
+		<!-- th scope="row"><label for="meta-defaultcontent" class="mqttcogs-row-title"><?php _e( 'Generate Content on Save', 'mqttcogs-textdomain' )?></label></th>
+			<td><input class="regular-text" type="checkbox" name="meta-defaultcontent" id="meta-defaultcontent" value="true" <?php if ( isset ( $mqttcogs_stored_meta['meta-defaultcontent'] ) ) echo $checked;  ?> />
+			</td>
+		</tr -->
+		
+		
+		<tr>
+			<th scope="row"><label for="meta-notes" class="mqttcogs-row-title"><?php _e( 'Notes', 'mqttcogs-textdomain' )?></label></th>
+			<td><?php
+				if (isset($mqttcogs_stored_meta['meta-notes'])) {
+					$meta_content = $mqttcogs_stored_meta['meta-notes'][0];
+				}
+				else {
+					$meta_content = '';
+				}
+				$meta_content = wpautop($meta_content,true);
+				$meta_content = stripslashes( wp_kses_decode_entities( $meta_content ));
+				wp_editor($meta_content, 'meta_content_editor', array(
+                        'wpautop'               =>  true,
+                        'media_buttons' =>      false,
+                        'textarea_name' =>      'meta-notes',
+                        'textarea_rows' =>      10,
+                        'teeny'                 =>  true
+                ));
+        ?>
+			</td>
+		</tr>
+	 </tbody>
+	 </table>
+		<?php
+	}
+
+	/**
+	 * Saves the custom meta input
+	 */
+	function mqttcogs_meta_save( $post_id, $post, $update ) {
+	    
+		// Checks save status
+		$is_autosave = wp_is_post_autosave( $post_id );
+		$is_revision = wp_is_post_revision( $post_id );
+		$is_valid_nonce = ( isset( $_POST[ 'mqttcogs_nonce' ] ) && wp_verify_nonce( $_POST[ 'mqttcogs_nonce' ], basename( __FILE__ ) ) ) ? 'true' : 'false';
+	 
+		// Exits script depending on save status
+		if ( $is_autosave || $is_revision || !$is_valid_nonce ) {
+			return;
+		}
+	 
+	  // Check permissions
+		if ( !current_user_can( 'edit_post', $post_id ) )
+			return $post_id;
+	
+		// Checks for input and sanitizes/saves if needed
+		if( isset( $_POST[ 'meta-topic' ] ) ) {
+			update_post_meta( $post_id, 'meta-topic', sanitize_text_field( $_POST[ 'meta-topic' ] ) );
+		}
+		
+		if( isset( $_POST[ 'meta-lnglat' ] ) ) {
+			update_post_meta( $post_id, 'meta-lnglat', sanitize_text_field( $_POST[ 'meta-lnglat' ] ) );
+		}
+		
+		
+		if( isset( $_POST[ 'meta-notes' ] ) ) {
+			update_post_meta( $post_id, 'meta-notes', esc_attr( $_POST[ 'meta-notes' ] ) );
+		}
+		
+		/*
+		if( isset( $_POST[ 'meta-defaultcontent' ] ) ) {
+			update_post_meta( $post_id, 'meta-defaultcontent', 'true');
+		}
+		else {
+		    delete_post_meta( $post_id, 'meta-defaultcontent');
+		}*/
+	}
+
+/*
+    function mqttcogs_content_save_pre($content) {
+        if( isset( $_POST[ 'meta-defaultcontent' ] ) ) {
+            return  "TEST";
+        }
+        
+    }*/
+
+	public function cptui_register_my_cpts_things() {
+		$labels = array(
+			"name" => __( "Things" ),
+			"singular_name" => __( "Thing"),
+		);
+
+		$args = array(
+			"label" => __( "Thing"),
+			"labels" => $labels,
+			"description" => "",
+			"public" => true,
+			"publicly_queryable" => true,
+			"show_ui" => true,
+			"delete_with_user" => false,
+			"show_in_rest" => true,
+			"rest_base" => "",
+			"rest_controller_class" => "WP_REST_Posts_Controller",
+			"has_archive" => false,
+			"show_in_menu" => true,
+			"show_in_nav_menus" => true,
+			"exclude_from_search" => false,
+			"capability_type" => "page",
+			"map_meta_cap" => true,
+			"hierarchical" => true,
+		/*	"rewrite" => array( "slug" => "thing", "with_front" => true ),*/
+			"query_var" => true,
+			"supports" => array( "title", "editor", "page-attributes", "thumbnail","mqttcogs_meta")
+			/*,"taxonomies" => array( "thingtypes" ),*/
+		);
+		register_post_type( "thing", $args );
+		//'taxonomies' 	      => array('post_tag'),
+		
+		/*
+	  $labels = array(
+		'name' => _x( 'Types', 'taxonomy general name' ),
+		'singular_name' => _x( 'Type', 'taxonomy singular name' ),
+		'search_items' =>  __( 'Search Types' ),
+		'all_items' => __( 'All Types' ),
+		'parent_item' => __( 'Parent Type' ),
+		'parent_item_colon' => __( 'Parent Type:' ),
+		'edit_item' => __( 'Edit Type' ), 
+		'update_item' => __( 'Update Type' ),
+		'add_new_item' => __( 'Add New Type' ),
+		'new_item_name' => __( 'New Type Name' ),
+		'menu_name' => __( 'Types' ),
+	  ); 	
+	 
+	  register_taxonomy('thingtypes',array('thing'), array(
+		'hierarchical' => true,
+		'labels' => $labels,
+		'show_ui' => true,
+		'show_admin_column' => true,
+		'query_var' => true,
+		'rewrite' => array( 'slug' => 'thingtype' ),
+	  ));*/
+	}
+	
+	
+	function my_editor_content( $post_content, $post ) { 
+		if (!empty($post_content)) {
+			return $post_content;		
+		}
+		switch($post->post_type) {
+			case 'thing':
+				$post_content = $this->getDefaultContent($post);
+			break;
+		}	
+		return $post_content;
+	}
+
+	//NOT USED
+	function getDefaultContent($post) {
+	
+		$var = 'World';
+		$str = <<<MARKER
+		<!-- wp:paragraph {"placeholder":"Create a custom page for your thing here"} -->
+<p></p>
+<!-- /wp:paragraph -->
+MARKER;
+		
+		return $str;
+	}
    	   	 
 	public function enqueueStylesAndScripts() {
 		
+		wp_enqueue_style('mqttcogs_styles', plugins_url('/css/mqttcogs_styles.css', __FILE__));
 		
 		wp_register_script('moment', 'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment-with-locales.min.js');
-				
-				
+						
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '2.2112');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '2.2118');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
@@ -538,8 +777,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     		die();
     	}
     	
-    	
+    	//CK: CHANGE TO TOPIC
     	$topic = $_GET['topic'];
+
+		$topic = $this->extractTopic($topic);
+	
     	$qos = (int) $_GET['qos'];
     	$payload = $_GET['payload'];
     	$retained = (int) $_GET['retained'];
@@ -817,7 +1059,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
      	$atts = array_change_key_case((array)$atts, CASE_LOWER);
  
-	  $atts = shortcode_atts([
+		$atts = shortcode_atts([
 	                                     'limit' => '999999',
 	                                     'topics' => '#',
 	                                     'from'=>'',
@@ -830,8 +1072,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		//whattypes of queries
 		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order']);	
 		$jsonret = json_encode($table);   
-	   $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
-	   $jsonret = str_replace('DEND"', '', $jsonret);
+	    $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
+	    $jsonret = str_replace('DEND"', '', $jsonret);
 	    
 	   return $jsonret;		
 	}
@@ -869,6 +1111,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName('data');	
 	  
+    	
 	    if (is_numeric($from)) {      
 	    	$from = time() + floatval($from)*86400;
 	    	$from = date('Y-m-d H:i:s', $from);
@@ -903,7 +1146,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			
 
     	    foreach($topics as $idx=>$topic) {
-    	    	$topic = $this->replaceWordpressUser($topic);
+				$post = NULL;
+				$topic = $this->extractTopic($topic);
+               // Debug::Log(DEBUG::INFO, "post {$post->ID}");				
+		
+				$topic = $this->replaceWordpressUser($topic);
 				
 				$agg = ($idx<count($aggregations))?$aggregations[$idx].'(`payload`) as payload':'`payload` as payload';
 				
@@ -967,13 +1214,22 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					for($i = 0; $i < count($topics); ++$i){
 						if ($i==$index) {
 							if (!$colset) {
+							      $p = "";
+							    if (!is_null($post)) {
+							        $lnglat = get_post_meta($post->ID, 'meta-lnglat', true);
+							        $p = ',"p":';
+							        if (!is_null($lnglat)) {
+							            $p = $p.'{"lnglat":"'.$lnglat.'"}';
+							        }
+							    }
+							    
 								if (is_numeric($row['payload'])) {
 									//add the next column definition
-									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"number"}');	
+									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"number"'.$p.'}');	
 								}
 								else {
 									//add the next column definition
-									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"string"}');	
+									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"string"'.$p.'}');	
 								}
 								$colset = true;
 							}
@@ -1237,7 +1493,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
   	//	Debug::Log(DEBUG::INFO, "Attrs {$atts['charttype']}");
 	  $atts = shortcode_atts([
 	                           'charttype' => 'LineChart',
-	                            'options' => '{"width":400,"height":300}',
+							    'options' => '{"width":400,"height":300}',
 					            'refresh_secs'=>0,
 								'script' => ''
 	                       ], $atts, NULL);
@@ -1258,6 +1514,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}
 		
   	wp_enqueue_script('chartdrawer');
+  	wp_enqueue_script('jquery');
   	
   	global $wp_scripts;
  
@@ -1275,6 +1532,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	 $graphs[] = array(
   	     "id"=>$id,
   	     "refresh_secs"=>$refresh_secs,
+  	     "globaloptions"=> wp_unslash($this->getOption('MQTT_GVisOptions', '{}')),
   	     "options"=> $options,
   	     "charttype"=>$charttype,
   	     "querystring"=>$querystring,
@@ -1282,6 +1540,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
   	    );
   	    
         $wp_scripts->add_data('chartdrawer', 'data', '');
+    //	wp_localize_script( 'chartdrawer', 'globaloptions',array('globaloptions'=>$this->getOption('MQTT_GVisOptions', '{}')));
     	wp_localize_script( 'chartdrawer', 'allcharts', $graphs );
     	return $script;	
 	}
@@ -1306,8 +1565,32 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
 		return (substr($haystack, -$length) === $needle);
 	}
-}
 
+	public function getPostBySlug($slug) {
+		$found_post = null;
+      	 /*
+		if ( $posts = get_posts( array( 
+			'name' => $slug, 
+			'post_type' => 'thing',
+			'post_status' => 'publish',
+			
+			'posts_per_page' => 1
+		) ) ) $found_post = $posts[0];
+        */
+        
+        $found_post = get_page_by_path($slug, 'OBJECT', 'thing');
+
+		return $found_post;
+	}
+	
+	public function extractTopic($topicorslug) {
+		$post = $this->getPostBySlug($topicorslug);
+		if (!is_null($post)) {
+			$topicorslug = get_post_meta( $post->ID, 'meta-topic', true );
+		}	
+		return $topicorslug;
+	}
+}
 
 class MySubscribeCallback extends MessageHandler
 {
@@ -1412,4 +1695,3 @@ class MySubscribeCallback extends MessageHandler
 		}
 	}
 }
-

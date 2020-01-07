@@ -5,7 +5,10 @@ if (allcharts && allcharts.length>0) {
         //chart/query/
         var self = this;
         var chartinfo = self.allcharts[i];
+        chartinfo.globaloptions = Function( '"use strict";return (' + chartinfo.globaloptions + ')')();
         chartinfo.options = Function( '"use strict";return (' + chartinfo.options + ')')();
+        
+        chartinfo.options = jQuery.extend(true, {}, chartinfo.globaloptions, chartinfo.options);
         
 		if (chartinfo.script) {
 			chartinfo.script =new  Function('"use strict";return ' + chartinfo.script + ';')();

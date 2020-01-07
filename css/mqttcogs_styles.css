@@ -1,0 +1,68 @@
+.group-card {
+  padding-top: 0px;
+  padding-right: 5px;
+  background-color: #f2f2f2;
+  padding-left: 5px;
+  border-radius: 2px; 
+  box-shadow: 0 2px 2px 0 rgba(0,0,0,0.14), 0 1px 5px 0 rgba(0,0,0,0.12), 0 3px 1px -2px rgba(0,0,0,0.2);
+  transition:0.3s;
+}
+
+.group-card h3 {
+	padding-top:10px;
+	font-weight:400!important;
+}
+.group-card h4 {
+	padding-top:10px;
+	font-weight:400!important;
+}
+
+.group-card {
+  padding-top: 0px;
+  padding-right: 5px;
+  background-color: #f2f2f2;
+  padding-left: 5px;
+  border-radius: 2px; 
+  box-shadow: 0 2px 2px 0 rgba(0,0,0,0.14), 0 1px 5px 0 rgba(0,0,0,0.12), 0 3px 1px -2px rgba(0,0,0,0.2);
+  transition:0.3s;
+}
+
+.group-card h3 {
+	padding-top:10px;
+	font-weight:400!important;
+}
+.group-card h4 {
+	padding-top:10px;
+	font-weight:400!important;
+}
+
+.cssHeaderRow {
+                background-color: #2A94D6;
+            }
+.cssTableRow {
+	background-color: #F0F1F2;
+}
+.cssOddTableRow {
+	background-color: #F0F1F2;
+}
+.cssSelectedTableRow {
+	font-size: 20px;
+	font-weight:bold;
+}
+.cssHoverTableRow {
+	background: #ccc;
+}
+.cssHeaderCell {
+	color: #FFFFFF;
+	font-size: 16px;
+	padding: 10px !important;
+	border: solid 1px #FFFFFF;
+}
+.cssTableCell {
+	font-size: 16px;
+	padding: 10px !important;
+	border: solid 1px #FFFFFF;
+}
+.cssRowNumberCell {
+	text-align: center;
+}
