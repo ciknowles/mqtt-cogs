@@ -40,6 +40,8 @@ namespace sskaje\mqtt\Message;
 use sskaje\mqtt\Debug;
 use sskaje\mqtt\Utility;
 use sskaje\mqtt\Message;
+use sskaje\mqtt\MQTT;
+use \Datetime;
 
 /**
  * Message PUBLISH
@@ -56,6 +58,27 @@ class PUBLISH extends Base
 
     protected $topic;
     protected $message;
+	protected $timestamp;
+
+	public function __construct(MQTT $mqtt) {
+		parent::__construct($mqtt);
+		 $this->setDateTime( new DateTime());
+	}
+	
+	/**
+     * Set DateTime
+     *
+     * @param string $datetime
+     */
+    public function setDateTime($datetime)
+    {
+        $this->timestamp = $datetime;
+    }
+	
+	public function getDateTime() 
+	{
+		return $this->timestamp;
+	}
 
     /**
      * Set Topic

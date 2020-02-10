@@ -1613,47 +1613,47 @@ class MySubscribeCallback extends MessageHandler
 		    Debug::Log(DEBUG::INFO,
 		    "MqttCogs msg received {$topic}, {$msg}, {$qos}, {$retain}");
 		   
-		
 			$tableName = $this->mqttcogs_plugin->prefixTableName('data');
 			
-			$datetime = new DateTime(); //current_time( 'mysql', true );
+			$publish_objectarr = apply_filters('mqttcogs_msg_in_pre',$publish_object);
 			
-			$publish_object = apply_filters('mqttcogs_msg_in_pre',$publish_object ,$datetime);
-			
-			if (!isset($publish_object)) {
+			if (!isset($publish_objectarr)) {
 				return;
 			}
 
-			$utc = date_format($datetime, 'Y-m-d H:i:s');
- 			
-			//deal with smartsleep nodes
-			if ($this->mqttcogs_plugin->endsWith($publish_object->getTopic(), '/255/3/0/32')) {				
-				$pieces = explode("/", $publish_object->getTopic());
-				$nodeid = $pieces[1];
-				$subnode = $pieces[2];
-				
-				//node is online so....
-				//TO DO BETTER CHECK HERE
-					
-				
-				$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
-				$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10, 'ASC');
-				
-				//rows are descending by datetime 
-				//$therows = array_reverse($therows);
-				$json = new stdClass();
-				
-				foreach($therows as $row) {
-					if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
-						$this->mqttcogs_plugin->deleteBufferById($row['id']);
-					}
-					else {
-						break;
+			if (!is_array($publish_objectarr)) {
+				$publish_objectarr = array($publish_objectarr);
+			}
+			foreach($publish_objectarr as $publish_object) {
+
+				$utc = date_format($publish_object->getDateTime(), 'Y-m-d H:i:s');
+
+				//deal with smartsleep nodes
+				if ($this->mqttcogs_plugin->endsWith($publish_object->getTopic(), '/255/3/0/32')) {			
+					$pieces = explode("/", $publish_object->getTopic());
+					$nodeid = $pieces[1];
+					$subnode = $pieces[2];
+
+					//node is online so....
+					//TO DO BETTER CHECK HERE
+
+					$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
+					$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10, 'ASC');
+
+					//rows are descending by datetime 
+					//$therows = array_reverse($therows);
+					$json = new stdClass();
+
+					foreach($therows as $row) {
+						if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
+							$this->mqttcogs_plugin->deleteBufferById($row['id']);
+						}
+						else {
+							break;
+						}
 					}
 				}
-			}
 			
-		
 			$wpdb->insert(
 					$tableName,
 					array(
@@ -1682,7 +1682,7 @@ class MySubscribeCallback extends MessageHandler
 							);
 				
 			//is this a node sleep? If yes then get any buffered messages
-			
+			}
 		}
 		catch (Exception $e) {
 		        Debug::Log(DEBUG::ERR,$e->getMessage());

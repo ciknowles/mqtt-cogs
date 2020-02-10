@@ -94,6 +94,13 @@ class Debug
         self::$priority = (int) $priority;
     }
 
+	
+	static public function ObjToStr($someVar) 
+	{
+		ob_start();
+		var_dump($someVar);
+		return ob_get_clean();
+	}
     /**
      * Log Message
      *
