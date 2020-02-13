@@ -225,6 +225,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	add_action('wp_enqueue_scripts', array(&$this, 'enqueueStylesAndScripts'));
 	
 	
+        //add_action( 'admin_enqueue_scripts',  array(&$this, 'enqueueStylesAndScripts_admin'));
+        //
+	
 	    //makes sure mqtt reader is active
 	    add_action($this->prefixTableName('watchdog'), array(&$this, 'do_mqtt_watchdog'));
 	    
@@ -238,8 +241,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         //        wp_enqueue_style('my-style', plugins_url('/css/my-style.css', __FILE__));
         //        fwp_enqueue_script('my-script', plugins_url('/js/my-script.js', __FILE__));
 
-	
-		
+		    
 	
         // Register short codes
         // http://plugin.michael-simpson.com/?page_id=39
@@ -274,6 +276,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	add_action('wp_ajax_doSet', array(&$this, 'ajaxACTION_doSet'));
     	add_action('wp_ajax_nopriv_doSet', array(&$this, 'ajaxACTION_doSet'));
 		
+		
+		add_action('wp_ajax_doGetDefaultSPContent', array(&$this, 'ajaxACTION_doGetDefaultSPContent'));
+		
 		//experimental
 		add_action( 'init',array(&$this, 'cptui_register_my_cpts_things' ));
 		
@@ -281,12 +286,88 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		add_action( 'save_post',array(&$this,  'mqttcogs_meta_save'), 10, 3 );
 		
-		//add_filter( 'content_save_pre',array(&$this, 'mqttcogs_content_save_pre', 10, 1 );
+		add_action( 'thingtypes_edit_form', array(&$this, 'thetypes_add_custom_fields_to_taxonomy_edit_page'), 10, 2 );
+		add_action( 'thingtypes_add_form', array(&$this, 'thetypes_add_custom_fields_to_taxonomy_add_page'), 10, 1 );
+		
+		add_action( 'load-edit-tags.php', array(&$this, 'gettext_init' ));
+		
+	    add_filter('manage_edit-thingtypes_columns', function ( $columns ) 
+            {
+                if( isset( $columns['slug'] ) )
+                    unset( $columns['slug'] );   
+            
+                return $columns;
+            } );
+		
+//		apply_filters( "manage_{$post_type}_posts_columns", string[] $post_columns )
 
-		//add_filter( 'default_content', array(&$this,'my_editor_content'), 10, 2 );
- 		
-	//	add_filter( 'single_template', array(&$this,'load_single_template'));
+		add_filter('manage_thing_posts_columns',  array(&$this, 'thing_posts_column_headers' ),10,1);
+		
+		add_action( 'manage_thing_posts_custom_column', array(&$this, 'thing_posts_column_content'), 10, 2 );
    	}
+   	
+
+    function thing_posts_column_content( $column_name, $post_id ) {
+
+        if ($column_name == 'type') {
+            $tax_id = get_post_meta( $post_id, 'meta-type', true );
+            $term = get_term_by( 'term_taxonomy_id', $tax_id, 'thingtypes');
+            echo  $term->name;
+        }
+    }
+
+   	
+      
+    function thing_posts_column_headers( $columns ) {
+        if( isset( $columns['taxonomy-thingtypes'] ) )
+            unset( $columns['taxonomy-thingtypes'] ); 
+            
+         $columns['type'] = __("Type", "mqttcogs-textdomain");
+         
+  
+        $customOrder = array('cb', 'title', 'type', 'date');
+
+          # return a new column array to wordpress.
+          # order is the exactly like you set in $customOrder.
+          foreach ($customOrder as $colname)
+            $new[$colname] = $columns[$colname];    
+          return $new;
+    }
+       
+   function gettext_init() {
+		add_filter('gettext', function ($translated, $original, $domain) {return $this->edittags_gettext($translated, $original, $domain);},10,3);
+        add_filter('gettext_with_context', function($translated, $text, $context, $domain)  {return $this->edittags_gettext($translated, $text, $domain);},10,4);
+   }
+   
+   function edittags_gettext( $translated, $original, $domain ) {
+       if ($domain==='mqttcogs-textdomain') {
+           return $translated;
+       }
+       
+       switch($original) {
+           case 'Description':
+               $translated = __('Template', 'mqttcogs-textdomain');
+               break;
+       }
+        return $translated;
+   }
+
+   	function thetypes_add_custom_fields_to_taxonomy_edit_page($tag, $taxonomy) {
+   	     ?><style>
+   	     .term-slug-wrap{display:none;}
+   	     </style><?php
+   	 ?>
+   	 <?php
+   	}
+   	function thetypes_add_custom_fields_to_taxonomy_add_page($taxonomy) {
+   	     ?><style>
+   	     .term-slug-wrap{display:none;}
+   	     </style><?php
+   	 ?>
+   	 <?php
+   	}
+   	
+   	
 	//NOT USED 
 	function load_single_template( $template ) {    
 		global $post;
@@ -306,6 +387,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
 	/* Adds a meta box to the post editing screen*/
 	function mqttcogs_custom_meta() {
+	    
 		add_meta_box( 'mqttcogs_meta', __( 'Thing Properties', 'mqttcogs-textdomain' ),  array(&$this, 'mqttcogs_meta_callback'), 'thing','advanced' );
 	}
 	
@@ -315,9 +397,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	function mqttcogs_meta_callback( $post ) {
 		wp_nonce_field( basename( __FILE__ ), 'mqttcogs_nonce' );
 
+	
 		$mqttcogs_stored_meta = get_post_meta( $post->ID );
 		
-
+		if (!isset ( $mqttcogs_stored_meta['meta-type']))
+		    $mqttcogs_stored_meta['meta-type'] = array(0);
+		
 		//array_merge
 		
 		$checked = 'checked="checked"';
@@ -338,10 +423,37 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		</tr>
 		
 		<tr>
-		<!-- th scope="row"><label for="meta-defaultcontent" class="mqttcogs-row-title"><?php _e( 'Generate Content on Save', 'mqttcogs-textdomain' )?></label></th>
-			<td><input class="regular-text" type="checkbox" name="meta-defaultcontent" id="meta-defaultcontent" value="true" <?php if ( isset ( $mqttcogs_stored_meta['meta-defaultcontent'] ) ) echo $checked;  ?> />
+		<th scope="row"><label for="meta-type" class="mqttcogs-row-title"><?php _e( 'Type', 'mqttcogs-textdomain' )?></label></th>
+	    <td>
+        <select name="meta-type" id="meta-type">
+            <option value="0" <?php if ( isset ( $mqttcogs_stored_meta['meta-type'] ))  selected( $mqttcogs_stored_meta['meta-type'][0], 0); ?>><?php _e('None', 'mqttcogs-textdomain' ) ?></option>
+            <?php 
+             $tax_terms = get_terms('thingtypes', array('hide_empty' => '0')); 
+            foreach ($tax_terms as $thingtypes): ?>
+            <option value="<?php echo $thingtypes->term_id; ?>" <?php if ( isset ( $mqttcogs_stored_meta['meta-type'] ) )  selected( $mqttcogs_stored_meta['meta-type'][0], strval($thingtypes->term_id) ); ?>><?php _e($thingtypes->name, 'mqttcogs-textdomain' ) ?></option>
+            <?php endforeach; ?>
+            
+        </select>
+        </td>
+        </tr>
+
+     
+		
+		<tr>
+		<th scope="row"><label for="meta-defaultcontent" class="mqttcogs-row-title"><?php _e( 'Page Content', 'mqttcogs-textdomain' )?></label></th>
+			<td><input class="regular-button" type="button" name="meta-defaultcontent" id="meta-defaultcontent" value="Generate" 
+			onclick="(function() {
+			    	wp.ajax.post('doGetDefaultSPContent',{postid:jQuery('#post_ID').val(), topic:jQuery('#meta-topic').val(), type:jQuery('#meta-type').val() })
+                      .done(function(response) {
+                      
+                       // wp.data.dispatch( 'core/editor' ).resetBlocks([]);
+            			var block = wp.blocks.createBlock( 'core/paragraph' );
+            			block.attributes.content = response.data;
+            			wp.data.dispatch( 'core/editor' ).insertBlocks( block );
+                });
+			})();"/>
 			</td>
-		</tr -->
+		</tr>
 		
 		
 		<tr>
@@ -394,6 +506,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			update_post_meta( $post_id, 'meta-topic', sanitize_text_field( $_POST[ 'meta-topic' ] ) );
 		}
 		
+		if( isset( $_POST[ 'meta-type' ] ) ) {
+			update_post_meta( $post_id, 'meta-type', sanitize_text_field( $_POST[ 'meta-type' ] ) );
+		}
+		
 		if( isset( $_POST[ 'meta-lnglat' ] ) ) {
 			update_post_meta( $post_id, 'meta-lnglat', sanitize_text_field( $_POST[ 'meta-lnglat' ] ) );
 		}
@@ -403,25 +519,58 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			update_post_meta( $post_id, 'meta-notes', esc_attr( $_POST[ 'meta-notes' ] ) );
 		}
 		
-		/*
+		
 		if( isset( $_POST[ 'meta-defaultcontent' ] ) ) {
 			update_post_meta( $post_id, 'meta-defaultcontent', 'true');
 		}
 		else {
 		    delete_post_meta( $post_id, 'meta-defaultcontent');
-		}*/
+		}
 	}
 
-/*
+
     function mqttcogs_content_save_pre($content) {
         if( isset( $_POST[ 'meta-defaultcontent' ] ) ) {
             return  "TEST";
         }
-        
-    }*/
+    }
 
 	public function cptui_register_my_cpts_things() {
+	
+		
 		$labels = array(
+        'name' => _x( 'Thing Types', 'taxonomy general name' ),
+        'singular_name' => _x( 'Thing Type', 'taxonomy singular name' ),
+        'search_items' =>  __( 'Search Types' ),
+        'all_items' => __( 'All Types' ),
+        'parent_item' => __( 'Parent Type' ),
+        'parent_item_colon' => __( 'Parent Type:' ),
+        'edit_item' => __( 'Edit Type' ), 
+        'update_item' => __( 'Update Type' ),
+        'add_new_item' => __( 'Add New Type' ),
+        'new_item_name' => __( 'New Type Name' ),
+        'menu_name' => __( 'Types' ),
+      ); 	
+ 
+        register_taxonomy('thingtypes',array('thing'), array(
+            'hierarchical' => false,
+            'labels' => $labels,
+            'show_ui' => true,
+            'show_admin_column' => true,
+            'query_var' => true,
+            'public'=> true,
+            'show_in_nav_menus' => true
+            )
+        );
+      
+      
+      
+      
+      
+      /*  'rewrite' => array( 'slug' => 'type' ),*/
+
+
+    	$labels = array(
 			"name" => __( "Things" ),
 			"singular_name" => __( "Thing"),
 		);
@@ -446,36 +595,51 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			"hierarchical" => true,
 		/*	"rewrite" => array( "slug" => "thing", "with_front" => true ),*/
 			"query_var" => true,
-			"supports" => array( "title", "editor", "page-attributes", "thumbnail","mqttcogs_meta")
-			/*,"taxonomies" => array( "thingtypes" ),*/
+			"supports" => array("title","editor","page-attributes", "thumbnail","mqttcogs_meta"),
+  		   'taxonomies' => array('thingtypes')
+
 		);
 		register_post_type( "thing", $args );
-		//'taxonomies' 	      => array('post_tag'),
 		
-		/*
-	  $labels = array(
-		'name' => _x( 'Types', 'taxonomy general name' ),
-		'singular_name' => _x( 'Type', 'taxonomy singular name' ),
-		'search_items' =>  __( 'Search Types' ),
-		'all_items' => __( 'All Types' ),
-		'parent_item' => __( 'Parent Type' ),
-		'parent_item_colon' => __( 'Parent Type:' ),
-		'edit_item' => __( 'Edit Type' ), 
-		'update_item' => __( 'Update Type' ),
-		'add_new_item' => __( 'Add New Type' ),
-		'new_item_name' => __( 'New Type Name' ),
-		'menu_name' => __( 'Types' ),
-	  ); 	
-	 
-	  register_taxonomy('thingtypes',array('thing'), array(
-		'hierarchical' => true,
-		'labels' => $labels,
-		'show_ui' => true,
-		'show_admin_column' => true,
-		'query_var' => true,
-		'rewrite' => array( 'slug' => 'thingtype' ),
-	  ));*/
-	}
+		if (!term_exists('Temperature','thingtypes')) {
+		    wp_insert_term(//this should probably be an array, but I kept getting errors..
+                'Temperature', // the term 
+                'thingtypes', // the taxonomy
+                array(
+                'slug' => 'temperature',
+                'description' =>  '[mqttcogs_drawgoogle ajax="true" charttype="LineChart" options="{width: \'100%\', height: \'100%\'}"][mqttcogs_data limit="100" order="DESC" topics=""][/mqttcogs_drawgoogle]',
+                ));
+		}
+		
+    }
+	
+	/*
+
+        function thing_meta_box( $post ) {
+            $this->setupLogging();
+              Debug::Log(DEBUG::INFO, 'thing_meta_box');
+        	$terms = get_terms( 'thingtypes', array( 'hide_empty' => false ) );
+        
+        	$post  = get_post();
+        	$types = wp_get_object_terms( $post->ID, 'thingtypes', array( 'orderby' => 'term_id', 'order' => 'ASC' ) );
+        	$name  = '';
+        
+            if ( ! is_wp_error( $types ) ) {
+            	if ( isset( $types[0] ) && isset( $types[0]->name ) ) {
+        			$name = $types[0]->name;
+        	    }
+            }
+        
+        	foreach ( $terms as $term ) {
+        ?>
+        		<label title='<?php esc_attr_e( $term->name ); ?>'>
+        		    <input type="radio" name="thingtype" value="<?php esc_attr_e( $term->name ); ?>" <?php checked( $term->name, $name ); ?>>
+        			<span><?php esc_html_e( $term->name ); ?></span>
+        		</label><br>
+        <?php
+            }
+        }
+*/
 	
 	
 	function my_editor_content( $post_content, $post ) { 
@@ -490,19 +654,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		return $post_content;
 	}
 
-	//NOT USED
-	function getDefaultContent($post) {
-	
-		$var = 'World';
-		$str = <<<MARKER
-		<!-- wp:paragraph {"placeholder":"Create a custom page for your thing here"} -->
-<p></p>
-<!-- /wp:paragraph -->
-MARKER;
-		
-		return $str;
-	}
-   	   	 
+
 	public function enqueueStylesAndScripts() {
 		
 		wp_enqueue_style('mqttcogs_styles', plugins_url('/css/mqttcogs_styles.css', __FILE__));
@@ -523,6 +675,14 @@ MARKER;
 		wp_register_script('datatables', 'https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js');
 		wp_register_script('datatablesdrawer', plugins_url('/js/datatablesdrawer.js', __FILE__), array(), '2.43');		
 	}
+	
+    /*		   	 
+	public function enqueueStylesAndScripts_admin() {
+		wp_register_script('mqttcogs_support', plugins_url('/js/support.js', __FILE__), array(), '2.21ssswssse2sse12');
+		global $pagenow;
+ 
+		wp_enqueue_script( 'mqttcogs_support');
+	}*/
 
     //prunes the mqttcogs database table. Run daily
 	function do_mqtt_prune() {
@@ -858,6 +1018,30 @@ MARKER;
 	   echo $jsonret;
 	   die();
 		//wp_send_json($jsonret);
+	}
+	
+	public function ajaxACTION_doGetDefaultSPContent() {
+	    $this->setupLogging();
+	    $json = new stdClass();     
+	    
+	    $term = get_term_by( 'term_taxonomy_id', $_POST['type'], 'thingtypes');
+	    $json->data = $term->description;
+	    $json->data = str_replace('topics=""', 'topics="'.$_POST['topic'].'"',$json->data);
+	    
+	    
+	    
+	    //$json->data = MqttShortcodeManager::getMqttShortcode($_POST['topic'], $_POST['type']);
+	
+	    //$json->data = $this->getSPDefaultContent($_GET['']
+	    // term_description('28','post_tag');
+	    //$json->data = term_description();
+	     
+	    // Don't let IE cache this request
+	    header("Pragma: no-cache");
+	    header("Cache-Control: no-cache, must-revalidate");
+	    header("Expires: Thu, 01 Jan 1970 00:00:00 GMT");
+	    header("Content-type: application/javascript");
+	    wp_send_json_success($json);
 	}
 	
 	private function replaceWordpressUser($somestring) {
