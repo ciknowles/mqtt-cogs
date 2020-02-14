@@ -1028,14 +1028,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $json->data = $term->description;
 	    $json->data = str_replace('topics=""', 'topics="'.$_POST['topic'].'"',$json->data);
 	    
-	    
-	    
-	    //$json->data = MqttShortcodeManager::getMqttShortcode($_POST['topic'], $_POST['type']);
-	
-	    //$json->data = $this->getSPDefaultContent($_GET['']
-	    // term_description('28','post_tag');
-	    //$json->data = term_description();
-	     
 	    // Don't let IE cache this request
 	    header("Pragma: no-cache");
 	    header("Cache-Control: no-cache, must-revalidate");
@@ -1054,12 +1046,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
                 $somestring = str_replace('{'.$key.'}', strval($value), $somestring);    
             }
         }
-        
         return $somestring;
 	}
 	
 	public function shortcodeSet($atts,$content) {
-		
 		if (!$this->canUserDoRoleOption('MQTT_WriteAccessRole')) {
 			return '';
 		}
@@ -1267,8 +1257,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $table_name = $this->prefixTableName($table);	
 		$topic = $this->replaceWordpressUser($topic);
 		//add the next column definition
+		$payloadfield = $this->getPayloadSQL($topic);
 		
-		$sql = $wpdb->prepare("SELECT `id`, `utc`,`topic`, `payload`, `qos`,`retain` from $table_name
+		$sql = $wpdb->prepare("SELECT `id`, `utc`,`topic`, $payloadfield, `qos`,`retain` from $table_name
 								WHERE topic LIKE %s 
 								order by utc $order limit %d",
 								$topic,
@@ -1329,20 +1320,22 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			}
 			
 
-    	    foreach($topics as $idx=>$topic) {
+    	    foreach($topics as $idx=>$fulltopic) {
 				$post = NULL;
-				$topic = $this->extractTopic($topic);
-               // Debug::Log(DEBUG::INFO, "post {$post->ID}");				
-		
+				$topic = $this->extractTopic($fulltopic);
+        	
 				$topic = $this->replaceWordpressUser($topic);
 				
-				$agg = ($idx<count($aggregations))?$aggregations[$idx].'(`payload`) as payload':'`payload` as payload';
+				$payloadfield = $this->getPayloadSQL($fulltopic);
+				$agg = ($idx<count($aggregations))?"$aggregations[$idx]($payloadfield) as payload":"$payloadfield as payload";
 				
+							
 				if (empty($group)) {
 					$sql = $wpdb->prepare("SELECT `utc`,$agg from $table_name
     	    	 						WHERE topic=%s 
     	    	 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
+    	    	 						AND $payloadfield IS NOT NULL
     	    	 						order by utc $order limit %d",
     	    	 						$topic,
     	    	 						$from,
@@ -1358,6 +1351,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						WHERE topic=%s 
     	    	 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
+    	    	 						AND $payloadfield IS NOT NULL
 										GROUP BY grouping
     	    	 						order by utc $order limit %d",
     	    	 						$topic,
@@ -1367,15 +1361,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						$to,
     	    	 						$limit			
     	    	 				        );
-    	    	 
-					
 				}
-    	    	 
+    	    	 Debug::Log(DEBUG::INFO, $sql);
+		
     	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
-    	    	
-				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $topic);
+				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $fulltopic);
 
-				
 				$colset = false;
 				
 				foreach($therows as $row) {
@@ -1772,7 +1763,20 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		if (!is_null($post)) {
 			$topicorslug = get_post_meta( $post->ID, 'meta-topic', true );
 		}	
-		return $topicorslug;
+		$found = strpos($topicorslug, '$');
+		if ($found === FALSE) 
+		    return $topicorslug;
+		
+		return substr($topicorslug, 0, $found);
+	}
+	
+	public function getPayloadSQL($topic) {
+	    $found = strchr($topic, '$');
+	    if ($found === FALSE) {
+	        
+	        return '`payload`';
+	    }
+	    return "JSON_EXTRACT(`payload`, '$found')";
 	}
 }
 
