@@ -12,7 +12,7 @@ if (allmaps && allmaps.length>0) {
 		else {
 			mapinfo.script = function (data, map, mapoptions) {
 				var markerArray = [];
-
+                var payload;
 				//loop through rows
 				for (var ridx=0;ridx<data.getNumberOfRows();ridx++) {
 					for (var cidx=1;cidx<data.getNumberOfColumns();cidx++) {
@@ -22,14 +22,24 @@ if (allmaps && allmaps.length>0) {
 						}
 						
 						//find a lat or lon
-						var payload = data.getValue(ridx, cidx);
+						payload = data.getValue(ridx, cidx);
 						var lat = payload.lat?payload.lat:payload.latitude;
 						var lon = payload.lon?payload.lon:(payload.lng?payload.lng:payload.longitude);
+						
+						if (!(lat && lon)) {
+						    payload= data.getColumnProperty(cidx, 'lnglat');
+						    payload = payload.split(',') ;
+						    if (payload.length==2) {
+						        lon = parseInt(payload[0]);
+						        lat = parseInt(payload[1]);
+						    }
+						} 
 						
 						if (lat && lon) {
 							markerArray.push(L.marker(new Array(lat, lon))
 							.bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)));
 						}
+						
 					}	
 				}
 

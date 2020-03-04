@@ -667,7 +667,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.2112');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.3112');
 
 		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.2112');
 				
@@ -1321,7 +1321,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			
 
     	    foreach($topics as $idx=>$fulltopic) {
-				$post = NULL;
+				$post = $this->getPostBySlug($fulltopic);
+	
 				$topic = $this->extractTopic($fulltopic);
         	
 				$topic = $this->replaceWordpressUser($topic);
@@ -1362,7 +1363,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						$limit			
     	    	 				        );
 				}
-    	    	 Debug::Log(DEBUG::INFO, $sql);
+    	    	//Debug::Log(DEBUG::INFO, $sql);
 		
     	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
 				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $fulltopic);
