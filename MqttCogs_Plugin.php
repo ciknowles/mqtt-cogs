@@ -1460,6 +1460,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	public function shortcodeDrawDataTable($atts, $content) {
 		static $datatables = array();	
 		$this->setupLogging();
+		wp_enqueue_script( 'jquery' );
 		//we include google scripts here for JSON parsing and datatable support
 		wp_enqueue_script('google_loadecharts');
 	    wp_enqueue_script('loadgoogle');
@@ -1525,6 +1526,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	public function shortcodeDrawLeaflet($atts, $content) {
 		static $leafletmaps = array();	
 		$this->setupLogging();
+		wp_enqueue_script( 'jquery' );
 		//we include google scripts here for JSON parsing and datatable support
 		wp_enqueue_script('google_loadecharts');
 	    wp_enqueue_script('loadgoogle');
@@ -1596,6 +1598,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 	  static $htmls = array();	
 	 
+	 wp_enqueue_script( 'jquery' );
 	  //only include google stuff for this shortcode
 	  wp_enqueue_script('google_loadecharts');
 	  wp_enqueue_script('loadgoogle');
@@ -1661,6 +1664,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	  static $graphs = array();	
 	 
+	 wp_enqueue_script( 'jquery' );
 	  //only include google stuff for this shortcode
 	  wp_enqueue_script('google_loadecharts');
 	  wp_enqueue_script('loadgoogle');
@@ -1690,7 +1694,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}
 		
   	wp_enqueue_script('chartdrawer');
-  	wp_enqueue_script('jquery');
   	
   	global $wp_scripts;
  
