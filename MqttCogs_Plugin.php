@@ -451,7 +451,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             			block.attributes.content = response.data;
             			wp.data.dispatch( 'core/editor' ).insertBlocks( block );
                 });
-			})();"/>
+			})();"/><span><small><?php _e( '(You can <strong>replace</strong> the topic with page slug!)', 'mqttcogs-textdomain' )?></small></span>
 			</td>
 		</tr>
 		
@@ -601,15 +601,50 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		);
 		register_post_type( "thing", $args );
 		
-		if (!term_exists('Temperature','thingtypes')) {
+		if (!term_exists('Line Chart','thingtypes')) {
 		    wp_insert_term(//this should probably be an array, but I kept getting errors..
-                'Temperature', // the term 
+                'Line Chart', // the term 
                 'thingtypes', // the taxonomy
                 array(
-                'slug' => 'temperature',
-                'description' =>  '[mqttcogs_drawgoogle ajax="true" charttype="LineChart" options="{width: \'100%\', height: \'100%\'}"][mqttcogs_data limit="100" order="DESC" topics=""][/mqttcogs_drawgoogle]',
+                'slug' => 'linechart',
+                'description' =>  '[mqttcogs_drawgoogle ajax="true" charttype="LineChart" options="{width: \'100%\', height: \'100%\'}"][mqttcogs_data limit="100" order="DESC" topics=""][/mqttcogs_drawgoogle]'
                 ));
 		}
+		
+		if (!term_exists('Leaflet Map Chart','thingtypes')) {
+		    wp_insert_term(//this should probably be an array, but I kept getting errors..
+                'Leaflet Map', // the term 
+                'thingtypes', // the taxonomy
+                array(
+                'slug' => 'leafletmap',
+                'description' =>  '[mqttcogs_drawleaflet refresh_secs="15" height="400px" options="{zoom:13}"][mqttcogs_data topics="" order="DESC" limit="100"][/mqttcogs_drawleaflet]',
+                ));
+		}
+		
+		if (!term_exists('DataTable','thingtypes')) {
+		    wp_insert_term(//this should probably be an array, but I kept getting errors..
+                'DataTable', // the term 
+                'thingtypes', // the taxonomy
+                array(
+                'slug' => 'datatable',
+                'description' =>  '[mqttcogs_drawdatatable options="{width: \'100%\'}"][mqttcogs_data  order="DESC" limit="10" topics=""][/mqttcogs_drawdatatable]'
+                ));
+		}
+		
+		
+		if (!term_exists('SparkLine','thingtypes')) {
+		    wp_insert_term(//this should probably be an array, but I kept getting errors..
+                'SparkLine', // the term 
+                'thingtypes', // the taxonomy
+                array(
+                'slug' => 'sparkline',
+                'description' =>  '[mqttcogs_drawgoogle charttype="SparklineChart" options="{areaOpacity:0, height:80, backgroundColor:\'transparent\',vAxis:{viewWindowMode:\'pretty\'},lineWidth:2, animation:{startup:true},curveType: \'function\'}" ajax="true"][mqttcogs_data  order="DESC" limit="100" topics=""][/mqttcogs_drawgoogle]'
+                ));
+		}
+
+
+		
+ 
 		
     }
 	
