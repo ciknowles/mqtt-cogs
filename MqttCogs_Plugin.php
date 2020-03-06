@@ -1362,7 +1362,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						$limit			
     	    	 				        );
 				}
-    	    	Debug::Log(DEBUG::INFO, $sql);
+    	    	Debug::Log(DEBUG::DEBUG, $sql);
 		
     	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
 				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $splitTopic["topic"]);
