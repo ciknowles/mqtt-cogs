@@ -940,7 +940,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	//CK: CHANGE TO TOPIC
     	$topic = $_GET['topic'];
 
-		$topic = $this->extractTopic($topic);
+        $splitTopic = $this->splitTopic($topic);
+		$topic = $splitTopic["topic"];
 	
     	$qos = (int) $_GET['qos'];
     	$payload = $_GET['payload'];
@@ -1323,11 +1324,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    foreach($topics as $idx=>$fulltopic) {
 				$post = $this->getPostBySlug($fulltopic);
 	
-				$topic = $this->extractTopic($fulltopic);
-        	
-				$topic = $this->replaceWordpressUser($topic);
+            	$splitTopic = $this->splitTopic($fulltopic);
+        		$payloadfield = $splitTopic["topic_sql"];
 				
-				$payloadfield = $this->getPayloadSQL($fulltopic);
 				$agg = ($idx<count($aggregations))?"$aggregations[$idx]($payloadfield) as payload":"$payloadfield as payload";
 				
 							
@@ -1338,7 +1337,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						AND (utc<=%s OR %s='')) 
     	    	 						AND $payloadfield IS NOT NULL
     	    	 						order by utc $order limit %d",
-    	    	 						$topic,
+    	    	 						$splitTopic["topic_core"],
     	    	 						$from,
     	    	 						$from,
     	    	 						$to,
@@ -1355,7 +1354,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						AND $payloadfield IS NOT NULL
 										GROUP BY grouping
     	    	 						order by utc $order limit %d",
-    	    	 						$topic,
+    	    	 						$splitTopic["topic_core"],
     	    	 						$from,
     	    	 						$from,
     	    	 						$to,
@@ -1363,22 +1362,18 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						$limit			
     	    	 				        );
 				}
-    	    	//Debug::Log(DEBUG::INFO, $sql);
+    	    	Debug::Log(DEBUG::INFO, $sql);
 		
     	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
-				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $fulltopic);
+				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $splitTopic["topic"]);
 
 				$colset = false;
 				
 				foreach($therows as $row) {
-			
 					$o = new stdClass();
 					$o->c = array();
 					
-					//add topic
-					//$o->c[] = json_decode('{"v":"'.$topic.'"}');
-					
-					//add grouping
+		    		//add grouping
 					if (empty($group)) {
 						$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
 					}
@@ -1390,7 +1385,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					for($i = 0; $i < count($topics); ++$i){
 						if ($i==$index) {
 							if (!$colset) {
-							      $p = "";
+			         		    
+			         		    //add on lng,lat from associated post as column property
+			         		    $p = "";
 							    if (!is_null($post)) {
 							        $lnglat = get_post_meta($post->ID, 'meta-lnglat', true);
 							        $p = ',"p":';
@@ -1401,11 +1398,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 							    
 								if (is_numeric($row['payload'])) {
 									//add the next column definition
-									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"number"'.$p.'}');	
+									$json->cols[] = json_decode('{"id":"'.$splitTopic["topic"].'","type":"number"'.$p.'}');	
 								}
 								else {
 									//add the next column definition
-									$json->cols[] = json_decode('{"id":"'.$topic.'","type":"string"'.$p.'}');	
+									$json->cols[] = json_decode('{"id":"'.$splitTopic["topic"].'","type":"string"'.$p.'}');	
 								}
 								$colset = true;
 							}
@@ -1460,8 +1457,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	public function shortcodeDrawDataTable($atts, $content) {
 		static $datatables = array();	
 		$this->setupLogging();
-		wp_enqueue_script( 'jquery' );
 		//we include google scripts here for JSON parsing and datatable support
+		wp_enqueue_script('jquery');
 		wp_enqueue_script('google_loadecharts');
 	    wp_enqueue_script('loadgoogle');
 	  
@@ -1526,8 +1523,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	public function shortcodeDrawLeaflet($atts, $content) {
 		static $leafletmaps = array();	
 		$this->setupLogging();
-		wp_enqueue_script( 'jquery' );
 		//we include google scripts here for JSON parsing and datatable support
+		wp_enqueue_script('jquery');
 		wp_enqueue_script('google_loadecharts');
 	    wp_enqueue_script('loadgoogle');
 	  
@@ -1598,8 +1595,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 	  static $htmls = array();	
 	 
-	 wp_enqueue_script( 'jquery' );
 	  //only include google stuff for this shortcode
+	  wp_enqueue_script('jquery');
 	  wp_enqueue_script('google_loadecharts');
 	  wp_enqueue_script('loadgoogle');
 			
@@ -1664,8 +1661,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 	  static $graphs = array();	
 	 
-	 wp_enqueue_script( 'jquery' );
 	  //only include google stuff for this shortcode
+	  wp_enqueue_script('jquery');
 	  wp_enqueue_script('google_loadecharts');
 	  wp_enqueue_script('loadgoogle');
 			
@@ -1694,6 +1691,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}
 		
   	wp_enqueue_script('chartdrawer');
+
   	
   	global $wp_scripts;
  
@@ -1747,41 +1745,41 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
 	public function getPostBySlug($slug) {
 		$found_post = null;
-      	 /*
-		if ( $posts = get_posts( array( 
-			'name' => $slug, 
-			'post_type' => 'thing',
-			'post_status' => 'publish',
-			
-			'posts_per_page' => 1
-		) ) ) $found_post = $posts[0];
-        */
-        
         $found_post = get_page_by_path($slug, 'OBJECT', 'thing');
-
 		return $found_post;
 	}
 	
-	public function extractTopic($topicorslug) {
-		$post = $this->getPostBySlug($topicorslug);
+	public function splitTopic($topicorslug) {
+	    $ret = array(
+	        "topic"=>"",
+	        "topic_core"=>"",
+	        //"topic_json"=>NULL,
+	        "topic_sql"=>'`payload`'
+	    );
+	    
+	    //return the topic from the shortcode OR referenced thing
+	    $post = $this->getPostBySlug($topicorslug);
 		if (!is_null($post)) {
 			$topicorslug = get_post_meta( $post->ID, 'meta-topic', true );
 		}	
-		$found = strpos($topicorslug, '$');
-		if ($found === FALSE) 
-		    return $topicorslug;
 		
-		return substr($topicorslug, 0, $found);
+		//replacewordpress user (To remove I think)
+		$topicorslug = $this->replaceWordpressUser($topicorslug);
+		$ret["topic"] = $topicorslug;
+		
+		$found = strpos($topicorslug, '$');
+	    if ($found === FALSE) {
+	        $ret["topic_core"]=$topicorslug;
+	    }
+	    else {
+	        $json_extract =  substr($topicorslug, $found);
+	        $ret["topic_core"]= substr($topicorslug, 0, $found);
+	       // $ret["topic_right"]= $json_extract;
+	        $ret["topic_sql"] = "JSON_EXTRACT(`payload`, '$json_extract')";
+	    }
+	    return $ret;
 	}
 	
-	public function getPayloadSQL($topic) {
-	    $found = strchr($topic, '$');
-	    if ($found === FALSE) {
-	        
-	        return '`payload`';
-	    }
-	    return "JSON_EXTRACT(`payload`, '$found')";
-	}
 }
 
 class MySubscribeCallback extends MessageHandler
