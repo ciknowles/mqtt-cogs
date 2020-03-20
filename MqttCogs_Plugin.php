@@ -1333,11 +1333,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    if (is_numeric($from)) {      
 	    	$from = time() + floatval($from)*86400;
 	    	$from = date('Y-m-d H:i:s', $from);
+	    //	$from = CONVERT_TZ($from,get_option('timezone_string'),'GMT');
 	    }
 	    
 	    if (is_numeric($to)) {
 	    	$to = time() + floatval($to)*86400;
 	    	$to = date('Y-m-d H:i:s', $to);
+	    //	$from = CONVERT_TZ($from,get_option('timezone_string'),'GMT');
 	    }
 	
 	    $topics = explode(',',$topics);
@@ -1355,13 +1357,14 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    
 	   	
     	    //add the datetime column or grouping column
-			if (empty($group)) {
+		//	if (empty($group)) {
 				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
-			}
-			else {
-				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"number"}');
-			}
+		//	}
+		//	else {
+		//		$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"number"}');
+		//	}
 			
+			$tzs = get_option('timezone_string');
 
     	    foreach($topics as $idx=>$fulltopic) {
 				$post = $this->getPostBySlug($fulltopic);
@@ -1379,6 +1382,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 						AND (utc<=%s OR %s='')) 
     	    	 						AND $payloadfield IS NOT NULL
     	    	 						order by utc $order limit %d",
+    	    	 						
     	    	 						$splitTopic["topic_core"],
     	    	 						$from,
     	    	 						$from,
@@ -1389,12 +1393,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	    	 
 				} 
 				else {
-					$sql = $wpdb->prepare("SELECT EXTRACT($group FROM `utc`) as grouping,$agg from $table_name
-    	    	 						WHERE topic=%s 
+				    // DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF(HOUR, '1970-01-01 00:00:00', '2020-03-19 18:12:00') HOUR)
+				    //EXTRACT($group FROM IFNULL(CONVERT_TZ(`utc`, 'GMT', %s), `utc`)) as grouping,$agg from $table_name
+    	    	
+					$sql = $wpdb->prepare("SELECT DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF($group, '1970-01-01 00:00:00', `utc`) $group) as utc, $agg from $table_name
+										WHERE topic=%s 
     	    	 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
     	    	 						AND $payloadfield IS NOT NULL
-										GROUP BY grouping
+										GROUP BY utc
     	    	 						order by utc $order limit %d",
     	    	 						$splitTopic["topic_core"],
     	    	 						$from,
@@ -1416,12 +1423,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					$o->c = array();
 					
 		    		//add grouping
-					if (empty($group)) {
+		//			if (empty($group)) {
 						$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
-					}
-					else {
-						$o->c[] = json_decode('{"v":'.$row["grouping"].'}');
-					}
+		//			}
+		//			else {
+		//				$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["grouping"])).')DEND"}');
+		//			}
 					
 					//loop through columns
 					for($i = 0; $i < count($topics); ++$i){
