@@ -1291,9 +1291,16 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	public function getLastN($table, $topic, $limit, $order) {
 	    global $wpdb;
 	    $table_name = $this->prefixTableName($table);	
-		$topic = $this->replaceWordpressUser($topic);
+	    
+	    $post = $this->getPostBySlug($topic);
+	
+    	$splitTopic = $this->splitTopic($topic);
+		$payloadfield = $splitTopic["topic_sql"];
+		
+	    
+		//$topic = $this->replaceWordpressUser($topic);
 		//add the next column definition
-		$payloadfield = $this->getPayloadSQL($topic);
+		//$payloadfield = $this->getPayloadSQL($topic);
 		
 		$sql = $wpdb->prepare("SELECT `id`, `utc`,`topic`, $payloadfield, `qos`,`retain` from $table_name
 								WHERE topic LIKE %s 
