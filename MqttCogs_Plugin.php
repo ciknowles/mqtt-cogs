@@ -1376,7 +1376,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				
 							
 				if (empty($group)) {
-					$sql = $wpdb->prepare("SELECT `utc`,$agg from $table_name
+					$sql = $wpdb->prepare("SELECT `utc` as dtm,$agg from $table_name
     	    	 						WHERE topic=%s 
     	    	 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
@@ -1396,13 +1396,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				    // DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF(HOUR, '1970-01-01 00:00:00', '2020-03-19 18:12:00') HOUR)
 				    //EXTRACT($group FROM IFNULL(CONVERT_TZ(`utc`, 'GMT', %s), `utc`)) as grouping,$agg from $table_name
     	    	
-					$sql = $wpdb->prepare("SELECT DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF($group, '1970-01-01 00:00:00', `utc`) $group) as utc, $agg from $table_name
+					$sql = $wpdb->prepare("SELECT DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF($group, '1970-01-01 00:00:00', `utc`) $group) as dtm, $agg from $table_name
 										WHERE topic=%s 
     	    	 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
     	    	 						AND $payloadfield IS NOT NULL
-										GROUP BY utc
-    	    	 						order by utc $order limit %d",
+										GROUP BY dtm
+    	    	 						order by dtm $order limit %d",
     	    	 						$splitTopic["topic_core"],
     	    	 						$from,
     	    	 						$from,
@@ -1424,7 +1424,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					
 		    		//add grouping
 		//			if (empty($group)) {
-						$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["utc"])*1000).')DEND"}');
+						$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["dtm"])*1000).')DEND"}');
 		//			}
 		//			else {
 		//				$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["grouping"])).')DEND"}');
