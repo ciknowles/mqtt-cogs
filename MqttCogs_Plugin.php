@@ -698,17 +698,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 						
 		wp_register_script('google_loadecharts','https://www.gstatic.com/charts/loader.js' );
 		wp_register_script('loadgoogle', plugins_url('/js/loadgoogle.js', __FILE__));
-		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '2.2118');
+		wp_register_script('chartdrawer', plugins_url('/js/googlechartdrawer.js', __FILE__), array(), '2.3');
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.3112');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.3');
 
-		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.2112');
+		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.3');
 				
 		wp_register_style('datatablescss', 'https://cdn.datatables.net/1.10.19/css/jquery.dataTables.min.css');
 		wp_register_script('datatables', 'https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js');
-		wp_register_script('datatablesdrawer', plugins_url('/js/datatablesdrawer.js', __FILE__), array(), '2.43');		
+		wp_register_script('datatablesdrawer', plugins_url('/js/datatablesdrawer.js', __FILE__), array(), '2.3');		
 	}
 	
     /*		   	 

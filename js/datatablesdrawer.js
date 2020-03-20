@@ -13,16 +13,16 @@ if (alltables && alltables.length>0) {
 		} 
 		else {
 			tableinfo.script = function (data, datatable, datatableoptions) {
-				if (!tableinfo.datatable) {
+				if (!this.datatable) {
 					//we have to inject html for column headers
 					//datetime, topic1, topic2, topic3...
-					var headerelement = jQuery('#' + tableinfo.id + '>thead>tr').first(); 
+					var headerelement = jQuery('#' + this.id + '>thead>tr').first(); 
 					
 					for (var cidx=0;cidx<data.getNumberOfColumns();cidx++) {
 							headerelement.append('<th>' + data.getColumnId(cidx) + '</th>');		
 					}		
-					datatable = jQuery('#' + tableinfo.id).DataTable(tableinfo.options);		
-					tableinfo.datatable = datatable;
+					datatable = jQuery('#' + this.id).DataTable(this.options);		
+					this.datatable = datatable;
 					
 					//datatables can't handle nulls....
 					for(var cidx=0;cidx<datatable.columns().length;cidx++) {
@@ -68,8 +68,8 @@ if (alltables && alltables.length>0) {
 			else {
 				var data = response.getDataTable();	 
 				
-				if (tableinfo.script) {
-					tableinfo.script(data, tableinfo.datatable, tableinfo.options);
+				if (self.script) {
+					self.script(data, self.datatable, self.options);
 				}
 			}
 			

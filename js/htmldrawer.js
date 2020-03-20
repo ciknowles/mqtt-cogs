@@ -9,9 +9,9 @@ if (allhtmls && allhtmls.length>0) {
 		} 
 		else {
 			htmlinfo.script = function (data) {
-				var target = jQuery('#' + htmlinfo.id).first(); 
+				var target = jQuery('#' + this.id).first(); 
 				
-				var content = htmlinfo.content.replace(/\{.+?\}/g, function(match, num) {	
+				var content = this.content.replace(/\{.+?\}/g, function(match, num) {	
 					//{something}
 					var val;
 					//strip braces
@@ -25,8 +25,8 @@ if (allhtmls && allhtmls.length>0) {
 					else {
 						val = data.getValue(0, parseInt(matches[0]));
 					}
-					if ((val instanceof Date) && (htmlinfo.dateformat)) {
-						val = moment(val).format(htmlinfo.dateformat);
+					if ((val instanceof Date) && (this.dateformat)) {
+						val = moment(val).format(this.dateformat);
 					}
 					return val;
 				});
@@ -43,8 +43,8 @@ if (allhtmls && allhtmls.length>0) {
 			else {
 				var data = response.getDataTable();	 
 				
-				if (htmlinfo.script) {
-					htmlinfo.script(data);
+				if (self.script) {
+					self.script(data);
 				}
 			}
 			

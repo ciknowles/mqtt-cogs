@@ -66,8 +66,8 @@ if (allmaps && allmaps.length>0) {
 			else {
 				var data = response.getDataTable();	 
 				
-				if (mapinfo.script) {
-					mapinfo.script(data, mapinfo.map, mapinfo.options);
+				if (self.script) {
+					self.script(data, self.map, self.options);
 				}
 			}
 			
