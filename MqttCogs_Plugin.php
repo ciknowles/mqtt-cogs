@@ -250,7 +250,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     	 
 		 add_shortcode('mqttcogs_drawleaflet', array($this, 'shortcodeDrawLeaflet'));
 		 
-		 add_shortcode('mqttcogs_drawHTML', array($this, 'shortcodeDrawHTML'));
+		 add_shortcode('mqttcogs_drawhtml', array($this, 'shortcodeDrawHTML'));
 		 
 	     //this is not completed yet
 		 add_shortcode('mqttcogs_drawdatatable', array($this, 'shortcodeDrawDataTable'));
