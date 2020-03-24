@@ -1824,7 +1824,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	        $json_extract =  substr($topicorslug, $found);
 	        $ret["topic_core"]= substr($topicorslug, 0, $found);
 	       // $ret["topic_right"]= $json_extract;
-	        $ret["topic_sql"] = "JSON_EXTRACT(`payload`, '$json_extract')";
+	        $ret["topic_sql"] = "CAST(JSON_EXTRACT(`payload`, '$json_extract') as DECIMAL)";
 	    }
 	    return $ret;
 	}
