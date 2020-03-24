@@ -100,7 +100,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
                 else {
                     switch($key) {
                         case 'MQTT_GVisOptions':
-                            $this->addOption($key,"{hAxis:{titleTextStyle:{color:'#607d8b'},textStyle:{color:'#b0bec5'}},vAxis:{gridlines:{color:'#37474f'},baselineColor:'transparent'},legend:{position:'top',alignment:'center',textStyle:{color:'#607d8b'}},colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4','#009688','#4caf50','#8bc34a','#cddc39'],areaOpacity:0.24,lineWidth:1,backgroundColor:'transparent',pieSliceBorderColor:'#263238',pieSliceTextStyle:{color:'#607d8b'},pieHole:0.9,bar:{groupWidth:'40'},colorAxis:{colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4']},backgroundColor:'transparent',datalessRegionColor:'#37474f',displayMode:'regions', cssClassNames:{'headerRow': 'cssHeaderRow','tableRow': 'cssTableRow','oddTableRow':'cssOddTableRow','selectedTableRow': 'cssSelectedTableRow','hoverTableRow': 'cssHoverTableRow','headerCell': 'cssHeaderCell','tableCell': 'cssTableCell','rowNumberCell': 'cssRowNumberCell'}}" );
+                            $this->addOption($key,"{hAxis:{titleTextStyle:{color:'#607d8b'},textStyle:{color:'#b0bec5'}},vAxis:{gridlines:{color:'#37474f'},baselineColor:'transparent'},legend:{position:'top',alignment:'center',textStyle:{color:'#607d8b'}},colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4','#009688','#4caf50','#8bc34a','#cddc39'],areaOpacity:0.24,lineWidth:2,backgroundColor:'transparent',pieSliceBorderColor:'#263238',pieSliceTextStyle:{color:'#607d8b'},pieHole:0.9,bar:{groupWidth:'40'},colorAxis:{colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4']},datalessRegionColor:'#37474f',displayMode:'regions', cssClassNames:{'headerRow': 'cssHeaderRow','tableRow': 'cssTableRow','oddTableRow':'cssOddTableRow','selectedTableRow': 'cssSelectedTableRow','hoverTableRow': 'cssHoverTableRow','headerCell': 'cssHeaderCell','tableCell': 'cssTableCell','rowNumberCell': 'cssRowNumberCell'}}" );
                         break;
                         
                     }
@@ -702,7 +702,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.3');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.323ss232323');
 
 		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.3');
 				
@@ -1618,7 +1618,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$content = strip_tags(do_shortcode($content));
 		$querystring =  str_replace(array("\r", "\n"), '', $content);
 
-		$script = '<div id="'.$id.'" style="height:'.$atts['height'].'">';
+		$script = '<div><div id="'.$id.'" style="height:'.$atts['height'].'"/></div>';
 	 
 	    $leafletmaps[] = array(
   	     "id"=>$id,
