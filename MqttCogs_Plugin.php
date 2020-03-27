@@ -102,8 +102,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
                         case 'MQTT_GVisOptions':
                             $this->addOption($key,"{hAxis:{titleTextStyle:{color:'#607d8b'},textStyle:{color:'#b0bec5'}},vAxis:{gridlines:{color:'#37474f'},baselineColor:'transparent'},legend:{position:'top',alignment:'center',textStyle:{color:'#607d8b'}},colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4','#009688','#4caf50','#8bc34a','#cddc39'],areaOpacity:0.24,lineWidth:2,backgroundColor:'transparent',pieSliceBorderColor:'#263238',pieSliceTextStyle:{color:'#607d8b'},pieHole:0.9,bar:{groupWidth:'40'},colorAxis:{colors:['#3f51b5','#2196f3','#03a9f4','#00bcd4']},datalessRegionColor:'#37474f',displayMode:'regions', cssClassNames:{'headerRow': 'cssHeaderRow','tableRow': 'cssTableRow','oddTableRow':'cssOddTableRow','selectedTableRow': 'cssSelectedTableRow','hoverTableRow': 'cssHoverTableRow','headerCell': 'cssHeaderCell','tableCell': 'cssTableCell','rowNumberCell': 'cssRowNumberCell'}}" );
                         break;
-                        
-                    }
+						case 'MQTT_LeafOptions':
+							$this->addOption($key, "{}");
+                        break;
+                    }	
                     
                 }
             }
@@ -417,8 +419,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		</tr>
 
 		<tr>
-			<th scope="row"><label for="meta-lnglat" class="mqttcogs-row-title"><?php _e( 'Longitude,Latitude', 'mqttcogs-textdomain' )?></label></th>
-			<td>	<input class="regular-text" type="text" name="meta-lnglat" id="meta-lnglat" value="<?php if ( isset ( $mqttcogs_stored_meta['meta-lnglat'] ) ) echo $mqttcogs_stored_meta['meta-lnglat'][0]; ?>" />
+			<th scope="row"><label for="meta-lnglat" class="mqttcogs-row-title"><?php _e( 'Longitude,Latitude (or geoJSON!)', 'mqttcogs-textdomain' )?></label></th>
+			<td>	<input class="regular-text" type="text" name="meta-lnglat" id="meta-lnglat" value="<?php if ( isset ( $mqttcogs_stored_meta['meta-lnglat'] ) ) echo  htmlspecialchars($mqttcogs_stored_meta['meta-lnglat'][0]); ?>" />
 			</td>
 		</tr>
 		
@@ -702,7 +704,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.323ss232323');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.39');
 
 		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.3');
 				
@@ -1441,8 +1443,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 							        $lnglat = get_post_meta($post->ID, 'meta-lnglat', true);
 							        $p = ',"p":';
 							        if (!is_null($lnglat)) {
-							            $p = $p.'{"lnglat":"'.$lnglat.'"}';
+										if (strpos($lnglat, '{')===FALSE) {
+											$p = $p.'{"lnglat":"'.$lnglat.'"}';
+										}
+										else {
+											$p = $p.'{"lnglat":'.$lnglat.'}';
+										}
 							        }
+									Debug::Log(DEBUG::INFO, $p);
+		
 							    }
 							    
 								if (is_numeric($row['payload'])) {
@@ -1572,6 +1581,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	public function shortcodeDrawLeaflet($atts, $content) {
 		static $leafletmaps = array();	
 		$this->setupLogging();
+		
+		Debug::Log(DEBUG::INFO, "Attrs {$atts['tilelayers']}");
 		//we include google scripts here for JSON parsing and datatable support
 		wp_enqueue_script('jquery');
 		wp_enqueue_script('google_loadecharts');
@@ -1598,6 +1609,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$height = $atts["height"];
 		$width = $atts["width"];
 		$refresh_secs = $atts["refresh_secs"];
+		
+		
+		
 		$tileLayers = $atts["tilelayers"];
 		//$prescript = $atts["script"];
 		$prescript='';
@@ -1623,6 +1637,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $leafletmaps[] = array(
   	     "id"=>$id,
   	     "refresh_secs"=>$refresh_secs,
+		 "globaloptions"=> wp_unslash($this->getOption('MQTT_LeafOptions', '{}')),
   	     "options"=> $options,
 		 "tilelayers"=> $tileLayers,
   	     "querystring"=>$querystring,

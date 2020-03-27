@@ -4,7 +4,12 @@ if (allmaps && allmaps.length>0) {
 		var self = this;
         var mapinfo = self.allmaps[i];
 		mapinfo.options = Function('"use strict";return (' + mapinfo.options + ')')();
-    
+        mapinfo.globaloptions = Function( '"use strict";return (' + mapinfo.globaloptions + ')')();
+
+        mapinfo.options = jQuery.extend(true, {}, mapinfo.globaloptions, mapinfo.options);
+        
+	
+	
 		mapinfo.map =  L.map(mapinfo.id, mapinfo.options); 
 		if (mapinfo.script) {
 					mapinfo.script = new Function('"use strict"; return ' + mapinfo.script + ';')();
@@ -26,20 +31,34 @@ if (allmaps && allmaps.length>0) {
 						var lat = payload.lat?payload.lat:payload.latitude;
 						var lon = payload.lon?payload.lon:(payload.lng?payload.lng:payload.longitude);
 						
-						if (!(lat && lon)) {
-						    payload= data.getColumnProperty(cidx, 'lnglat');
-						    payload = payload.split(',') ;
-						    if (payload.length==2) {
-						        lon = parseInt(payload[0]);
-						        lat = parseInt(payload[1]);
-						    }
-						} 
-						
+						//lon lat from payload so add marker and return
 						if (lat && lon) {
 							markerArray.push(L.marker(new Array(lat, lon))
 							.bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)));
+							continue;
 						}
 						
+						//lon lat from lnglat column property
+						payload= data.getColumnProperty(cidx, 'lnglat');
+						if (payload) {		
+							//is a simple comma delimited value
+							if (!payload.type) {
+								payload = payload.split(',') ;
+								if (payload.length==2) {
+									lon = parseInt(payload[0]);
+									lat = parseInt(payload[1]);
+								}
+								//lon lat from lnglat field so return here
+								if (lat && lon) {
+									markerArray.push(L.marker(new Array(lat, lon)).bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)));
+									continue;
+								}					
+							}
+							//shape from geoJSON
+							else {
+								markerArray.push(L.geoJSON(payload).bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)));
+							}
+						}
 					}	
 				}
 

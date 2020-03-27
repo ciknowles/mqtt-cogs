@@ -376,7 +376,7 @@ class MqttCogs_OptionsManager {
         else { // Simple input field
             ?>
             <p><input type="text" name="<?php echo $aOptionKey ?>" id="<?php echo $aOptionKey ?>"
-                      value="<?php echo wp_unslash($savedOptionValue) ?>" size="50"/></p>
+                      value="<?php echo  htmlspecialchars(wp_unslash($savedOptionValue)) ?>" size="50"/></p>
             <?php
 
         }
