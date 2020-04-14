@@ -7,12 +7,11 @@ if (allmaps && allmaps.length>0) {
         mapinfo.globaloptions = Function( '"use strict";return (' + mapinfo.globaloptions + ')')();
 
         mapinfo.options = jQuery.extend(true, {}, mapinfo.globaloptions, mapinfo.options);
+		mapinfo.options.initalized = false;
         
-	
-	
 		mapinfo.map =  L.map(mapinfo.id, mapinfo.options); 
 		if (mapinfo.script) {
-					mapinfo.script = new Function('"use strict"; return ' + mapinfo.script + ';')();
+			mapinfo.script = new Function('"use strict"; return ' + mapinfo.script + ';')();
 		} 
 		else {
 			mapinfo.script = function (data, map, mapoptions) {
@@ -50,7 +49,7 @@ if (allmaps && allmaps.length>0) {
 								}
 								//lon lat from lnglat field so return here
 								if (lat && lon) {
-									markerArray.push(L.marker(new Array(lat, lon)).bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)));
+									markerArray.push(L.marker(new Array(lat, lon)).bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)).openPopup());
 									continue;
 								}					
 							}
@@ -63,7 +62,11 @@ if (allmaps && allmaps.length>0) {
 				}
 
 				var group = L.featureGroup(markerArray).addTo(map);
-				map.fitBounds(group.getBounds());
+				
+				if (!mapoptions.initialized)  {
+					map.fitBounds(group.getBounds());
+					mapoptions.initialized = true;
+				}
 			}
 		}
 

@@ -420,30 +420,24 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
 		<tr>
 			<th scope="row"><label for="meta-lnglat" class="mqttcogs-row-title"><?php _e( 'Longitude,Latitude (or geoJSON!)', 'mqttcogs-textdomain' )?></label></th>
-			<td>	<input class="regular-text" type="text" name="meta-lnglat" id="meta-lnglat" value="<?php if ( isset ( $mqttcogs_stored_meta['meta-lnglat'] ) ) echo  htmlspecialchars($mqttcogs_stored_meta['meta-lnglat'][0]); ?>" />
+			<td>	
+				<textarea class="regular-text" rows="10" name="meta-lnglat" id="meta-lnglat" placeholder="<?php _e( 'Either a comma separated longitude,latitude or geoJSON', 'mqttcogs-textdomain' )?>"><?php if ( isset ( $mqttcogs_stored_meta['meta-lnglat'] ) ) echo  htmlspecialchars($mqttcogs_stored_meta['meta-lnglat'][0]); ?></textarea>
 			</td>
 		</tr>
 		
 		<tr>
-		<th scope="row"><label for="meta-type" class="mqttcogs-row-title"><?php _e( 'Type', 'mqttcogs-textdomain' )?></label></th>
+		<th scope="row"><label for="meta-type" class="mqttcogs-row-title"><?php _e( 'Generate', 'mqttcogs-textdomain' )?></label></th>
 	    <td>
-        <select name="meta-type" id="meta-type">
-            <option value="0" <?php if ( isset ( $mqttcogs_stored_meta['meta-type'] ))  selected( $mqttcogs_stored_meta['meta-type'][0], 0); ?>><?php _e('None', 'mqttcogs-textdomain' ) ?></option>
-            <?php 
-             $tax_terms = get_terms('thingtypes', array('hide_empty' => '0')); 
-            foreach ($tax_terms as $thingtypes): ?>
-            <option value="<?php echo $thingtypes->term_id; ?>" <?php if ( isset ( $mqttcogs_stored_meta['meta-type'] ) )  selected( $mqttcogs_stored_meta['meta-type'][0], strval($thingtypes->term_id) ); ?>><?php _e($thingtypes->name, 'mqttcogs-textdomain' ) ?></option>
-            <?php endforeach; ?>
-            
-        </select>
-        </td>
-        </tr>
-
-     
-		
-		<tr>
-		<th scope="row"><label for="meta-defaultcontent" class="mqttcogs-row-title"><?php _e( 'Page Content', 'mqttcogs-textdomain' )?></label></th>
-			<td><input class="regular-button" type="button" name="meta-defaultcontent" id="meta-defaultcontent" value="Generate" 
+			<select name="meta-type" id="meta-type">
+				
+				<?php 
+				$tax_terms = get_terms('thingtypes', array('hide_empty' => '0')); 
+				foreach ($tax_terms as $thingtypes): ?>
+				<option value="<?php echo $thingtypes->term_id; ?>" <?php //if ( isset ( $mqttcogs_stored_meta['meta-type'] ) )  selected( $mqttcogs_stored_meta['meta-type'][0], strval($thingtypes->term_id) ); ?>>
+					<?php _e($thingtypes->name, 'mqttcogs-textdomain' ) ?></option>
+				<?php endforeach; ?>
+			</select>
+			<input class="regular-button" type="button" name="meta-defaultcontent" id="meta-defaultcontent" value="Add" 
 			onclick="(function() {
 			    	wp.ajax.post('doGetDefaultSPContent',{postid:jQuery('#post_ID').val(), topic:jQuery('#meta-topic').val(), type:jQuery('#meta-type').val() })
                       .done(function(response) {
@@ -454,9 +448,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             			wp.data.dispatch( 'core/editor' ).insertBlocks( block );
                 });
 			})();"/><span><small><?php _e( '(You can <strong>replace</strong> the topic with page slug!)', 'mqttcogs-textdomain' )?></small></span>
-			</td>
-		</tr>
-		
+        </td>
+        </tr>
 		
 		<tr>
 			<th scope="row"><label for="meta-notes" class="mqttcogs-row-title"><?php _e( 'Notes', 'mqttcogs-textdomain' )?></label></th>
@@ -508,9 +501,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			update_post_meta( $post_id, 'meta-topic', sanitize_text_field( $_POST[ 'meta-topic' ] ) );
 		}
 		
+		/*
 		if( isset( $_POST[ 'meta-type' ] ) ) {
 			update_post_meta( $post_id, 'meta-type', sanitize_text_field( $_POST[ 'meta-type' ] ) );
-		}
+		}*/
 		
 		if( isset( $_POST[ 'meta-lnglat' ] ) ) {
 			update_post_meta( $post_id, 'meta-lnglat', sanitize_text_field( $_POST[ 'meta-lnglat' ] ) );
@@ -541,17 +535,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	
 		
 		$labels = array(
-        'name' => _x( 'Thing Types', 'taxonomy general name' ),
-        'singular_name' => _x( 'Thing Type', 'taxonomy singular name' ),
+        'name' => _x( 'Templates', 'taxonomy general name' ),
+        'singular_name' => _x( 'Template', 'taxonomy singular name' ),
         'search_items' =>  __( 'Search Types' ),
-        'all_items' => __( 'All Types' ),
-        'parent_item' => __( 'Parent Type' ),
-        'parent_item_colon' => __( 'Parent Type:' ),
-        'edit_item' => __( 'Edit Type' ), 
-        'update_item' => __( 'Update Type' ),
-        'add_new_item' => __( 'Add New Type' ),
-        'new_item_name' => __( 'New Type Name' ),
-        'menu_name' => __( 'Types' ),
+        'all_items' => __( 'All Templates' ),
+        'parent_item' => __( 'Parent Template' ),
+        'parent_item_colon' => __( 'Parent Template:' ),
+        'edit_item' => __( 'Edit Template' ), 
+        'update_item' => __( 'Update Template' ),
+        'add_new_item' => __( 'Add New Template' ),
+        'new_item_name' => __( 'New Type Template' ),
+        'menu_name' => __( 'Templates' )
       ); 	
  
         register_taxonomy('thingtypes',array('thing'), array(
@@ -603,51 +597,83 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		);
 		register_post_type( "thing", $args );
 		
-		if (!term_exists('Line Chart','thingtypes')) {
+		$term = 'Line Chart (Last 10 items)';
+		if (!term_exists($term,'thingtypes')) {
 		    wp_insert_term(//this should probably be an array, but I kept getting errors..
-                'Line Chart', // the term 
+                $term, // the term 
                 'thingtypes', // the taxonomy
                 array(
                 'slug' => 'linechart',
-                'description' =>  '[mqttcogs_drawgoogle ajax="true" charttype="LineChart" options="{width: \'100%\', height: \'100%\'}"][mqttcogs_data limit="100" order="DESC" topics=""][/mqttcogs_drawgoogle]'
+                'description' =>  '[mqttcogs_drawgoogle refresh_secs="15" charttype="LineChart" options="{width: \'100%\', height: \'100%\'}"][mqttcogs_data limit="10" order="DESC" topics=""][/mqttcogs_drawgoogle]'
                 ));
 		}
 		
-		if (!term_exists('Leaflet Map Chart','thingtypes')) {
+		$term =  'Line Chart (Last 24 hours)';
+		if (!term_exists($term,'thingtypes')) {
 		    wp_insert_term(//this should probably be an array, but I kept getting errors..
-                'Leaflet Map', // the term 
+               $term, // the term 
+                'thingtypes', // the taxonomy
+                array(
+                'slug' => 'linechart',
+                'description' =>  '[mqttcogs_drawgoogle refresh_secs="15" charttype="LineChart" options="{width: \'100%\', height: \'100%\'}"][mqttcogs_data from="-1" order="DESC" topics=""][/mqttcogs_drawgoogle]'
+                ));
+		}
+		
+		$term = 'Line Chart (Last 7 days)';
+		if (!term_exists($term,'thingtypes')) {
+		    wp_insert_term(//this should probably be an array, but I kept getting errors..
+                $term, // the term 
+                'thingtypes', // the taxonomy
+                array(
+                'slug' => 'linechart',
+                'description' =>  '[mqttcogs_drawgoogle refresh_secs="15" charttype="LineChart" options="{width: \'100%\', height: \'100%\'}"][mqttcogs_data from="-7" order="DESC" topics=""][/mqttcogs_drawgoogle]'
+                ));
+		}
+		
+		$term = 'Line Chart (Last 7 days Avg Per Day)';
+		if (!term_exists($term,'thingtypes')) {
+		    wp_insert_term(//this should probably be an array, but I kept getting errors..
+                $term, // the term 
+                'thingtypes', // the taxonomy
+                array(
+                'slug' => 'linechart',
+                'description' =>  '[mqttcogs_drawgoogle ajax="true" charttype="LineChart" options="{width: \'100%\', height: \'100%\',title:\'Average\'}"][mqttcogs_data order="DESC" group="DAY"
+ aggregations="AVG" from="-7" topics=""][/mqttcogs_drawgoogle]'
+                ));
+		}
+		
+		$term =  'Leaflet Map (Last 10 items)';
+		if (!term_exists($term,'thingtypes')) {
+		    wp_insert_term(//this should probably be an array, but I kept getting errors..
+              $term, // the term 
                 'thingtypes', // the taxonomy
                 array(
                 'slug' => 'leafletmap',
-                'description' =>  '[mqttcogs_drawleaflet refresh_secs="15" height="400px" options="{zoom:13}"][mqttcogs_data topics="" order="DESC" limit="100"][/mqttcogs_drawleaflet]',
+                'description' =>  '[mqttcogs_drawleaflet refresh_secs="15" height="400px" options="{zoom:13}"][mqttcogs_data topics="" order="DESC" limit="10"][/mqttcogs_drawleaflet]',
                 ));
 		}
 		
-		if (!term_exists('DataTable','thingtypes')) {
+		$term = 'DataTable (Last 10 items)';
+		if (!term_exists($term,'thingtypes')) {
 		    wp_insert_term(//this should probably be an array, but I kept getting errors..
-                'DataTable', // the term 
+               $term, // the term 
                 'thingtypes', // the taxonomy
                 array(
                 'slug' => 'datatable',
-                'description' =>  '[mqttcogs_drawdatatable options="{width: \'100%\'}"][mqttcogs_data  order="DESC" limit="10" topics=""][/mqttcogs_drawdatatable]'
+                'description' =>  '[mqttcogs_drawdatatable refresh_secs="15" options="{width: \'100%\'}"][mqttcogs_data  order="DESC" limit="10" topics=""][/mqttcogs_drawdatatable]'
                 ));
 		}
 		
-		
-		if (!term_exists('SparkLine','thingtypes')) {
+		$term = 'SparkLine (Last 100 items)';
+		if (!term_exists($term,'thingtypes')) {
 		    wp_insert_term(//this should probably be an array, but I kept getting errors..
-                'SparkLine', // the term 
+                $term, // the term 
                 'thingtypes', // the taxonomy
                 array(
                 'slug' => 'sparkline',
-                'description' =>  '[mqttcogs_drawgoogle charttype="SparklineChart" options="{areaOpacity:0, height:80, backgroundColor:\'transparent\',vAxis:{viewWindowMode:\'pretty\'},lineWidth:2, animation:{startup:true},curveType: \'function\'}" ajax="true"][mqttcogs_data  order="DESC" limit="100" topics=""][/mqttcogs_drawgoogle]'
+                'description' =>  '[mqttcogs_drawgoogle charttype="SparklineChart" refresh_secs="15" options="{areaOpacity:0, height:80, backgroundColor:\'transparent\',vAxis:{viewWindowMode:\'pretty\'},lineWidth:2, animation:{startup:true},curveType: \'function\'}"][mqttcogs_data  order="DESC" limit="100" topics=""][/mqttcogs_drawgoogle]'
                 ));
 		}
-
-
-		
- 
-		
     }
 	
 	/*
@@ -704,7 +730,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.39');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.311');
 
 		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.3');
 				
@@ -824,9 +850,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     public function shutdownHandler() //will be called when php script ends.
     {
         $lasterror = error_get_last();
-	    $error = "[SHUTDOWN] lvl:" . $lasterror['type'] . " | msg:" . $lasterror['message'] . " | file:" . $lasterror['file'] . " | ln:" . $lasterror['line'];            
+	    //$error = "[SHUTDOWN] lvl:" . $lasterror['type'] . " | msg:" . $lasterror['message'] . " | file:" . $lasterror['file'] . " | ln:" . $lasterror['line'];            
         
-           Debug::Log(DEBUG::ERR, $error);  
+         Debug::Log(DEBUG::ERR, var_export($lasterror, TRUE));  
     }
 	
 	public function buildMQTTClient($cid) {
@@ -1582,7 +1608,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		static $leafletmaps = array();	
 		$this->setupLogging();
 		
-		Debug::Log(DEBUG::INFO, "Attrs {$atts['tilelayers']}");
+	//	Debug::Log(DEBUG::INFO, "Attrs {$atts['tilelayers']}");
 		//we include google scripts here for JSON parsing and datatable support
 		wp_enqueue_script('jquery');
 		wp_enqueue_script('google_loadecharts');
@@ -1869,8 +1895,10 @@ class MySubscribeCallback extends MessageHandler
 		   
 			$tableName = $this->mqttcogs_plugin->prefixTableName('data');
 			
-			$publish_objectarr = apply_filters('mqttcogs_msg_in_pre',$publish_object);
 			
+		    $publish_objectarr = array($publish_object);
+			$publish_objectarr = apply_filters('mqttcogs_msg_in_pre',$publish_objectarr);
+		
 			if (!isset($publish_objectarr)) {
 				return;
 			}
@@ -1878,6 +1906,7 @@ class MySubscribeCallback extends MessageHandler
 			if (!is_array($publish_objectarr)) {
 				$publish_objectarr = array($publish_objectarr);
 			}
+		
 			foreach($publish_objectarr as $publish_object) {
 
 				$utc = date_format($publish_object->getDateTime(), 'Y-m-d H:i:s');
@@ -1892,6 +1921,10 @@ class MySubscribeCallback extends MessageHandler
 					//TO DO BETTER CHECK HERE
 
 					$txtopic = $this->mqttcogs_plugin->getOption('MQTT_MySensorsTxTopic', 'mysensors_in');	
+						Debug::Log(DEBUG::INFO,
+		            "MqttCogs txtopic {$subnode}");
+		   
+	
 					$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10, 'ASC');
 
 					//rows are descending by datetime 
@@ -1899,6 +1932,7 @@ class MySubscribeCallback extends MessageHandler
 					$json = new stdClass();
 
 					foreach($therows as $row) {
+					    
 						if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
 							$this->mqttcogs_plugin->deleteBufferById($row['id']);
 						}
