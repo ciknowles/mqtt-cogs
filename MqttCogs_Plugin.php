@@ -901,6 +901,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			return true;				
 		}
 		
+		
 		$key = $pieces[0];
 		$key = $rootkey;
 		
@@ -914,7 +915,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		if (count($rows)==1) {
 			$utcunixdate = strtotime($rows[0]['utc']);
 			$stayalive = intval($rows[0]['utc']);
-			return (($time()>=$utcunixdate) && ($time()<$utcunixdate + $stayalive));
+			return (($time()>=$utcunixdate) && ($time()<$utcunixdate + $stayalive/2));
 		}			
 		return false;
 	}
@@ -943,44 +944,52 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 	
 	public function sendMqtt($id, $topic, $payload, $qos, $retained, $result) {
+	   	$this->setupLogging();
+	
+	         		
 		return $this->sendMqttInternal($id, $topic, $payload, $qos, $retained, true, $result);
 	}
 	
 	public function sendMqttInternal($id, $topic, $payload, $qos, $retained, $trybuffer, $result) {
 	
+	  	     
 		if ($trybuffer) {
 			if (!$this->isNodeOnline($topic, $this->getOption('MQTT_MySensorsRxTopic', 'mysensors_out'))) {
+			    Debug::Log(DEBUG::INFO,"Message buffered, node offline topic {$topic} payload {$payload}");
 				$this->bufferMessage($topic,$payload,$qos,$retained);	
-				$json->status = 'buffered';
+				$result->status = 'buffered';
 				return true;
 			}
 		}
 		
+	   Debug::Log(DEBUG::INFO,"Mqtt sending topic {$topic} payload {$payload}");
+
+
 	    //if online send to broker
     	$mqtt = $this->buildMQTTClient($id);
     	    		
-    	$result = $mqtt->connect();
+    	$ret = $mqtt->connect();
     	
-    	if (!($result)) {
+    	if (!($ret)) {
     	    Debug::Log(DEBUG::ERR,"doSet: MQTT can't connect");
-        		$json->status = 'error';
+        		$result->status = 'error';
     		$error_1 = new stdClass();
     		$error_1->reason='mqtt connection failure';
     		$error_1->message = '';
-    		$json->errors = array();
-    		$json->errors.push($error_1); 	
+    		$result->errors = array();
+    		$result->errors.push($error_1); 	
 			return false;
     	}
     	else {   	
         	if (!$mqtt->publish_sync($topic, $payload, $qos, $retained)) {
         	    Debug::Log(DEBUG::ERR,"doSet: MQTT publish failure");
         		
-        		$json->status = 'error';
+        		$result->status = 'error';
         		$error_1 = new stdClass();
         		$error_1->reason='mqtt publish failure';
         		$error_1->message = '';
-        		$json->errors = array();
-        		$json->errors.push($error_1);
+        		$result->errors = array();
+        		$result->errors.push($error_1);
 				return false;
         	}
     	}
@@ -1139,11 +1148,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				'minrole'=>''
 		], $atts, NULL);
 	
-		$currentvalue = $this->shortcodeGet($atts);
-		
-		if (!$currentvalue) {
-			$currentvalue = $atts['input_value'];
+				
+		if ($atts['input_type'] != 'button') {
+			$currentvalue = $this->shortcodeGet($atts);
 		}
+			
+	
 		
 		$id =$atts['id'];
 		$class = $atts['class'];
@@ -1173,7 +1183,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$url = $this->getAjaxUrl($action);
 		
 		//case where there is no last value
-		if (!$currentvalue) {
+		if (!isset($currentvalue)) {
 			$currentvalue= $atts['input_value'];
 
 			//if it looks integer then make it integer
@@ -1190,57 +1200,72 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			$checked = 'checked';
 		}
 		
-		$script = "
-	 	<div id='$id' class='$class'>
-	 		<input id='input_$id' value='$currentvalue' $input_type $input_title $input_pattern $input_min $input_max $input_step onchange='setMQTTData$id()' $checked>
-			<label for='input_$id'>$label<span class='sw'></span></label>	
+		$script = "";
+		if ($input_type=="type='button'") {
+			$script = "
+				<div id='$id' class='$class'>
+				<button id='input_$id' value='$currentvalue' $input_title onclick='setMQTTData$id()'>$label<span class='sw'></span></button>
+			";
 			
-	 	 	<script type='text/javascript'>
-	    		
-	      	function setMQTTData$id() {
-	      		
-	      		if (jQuery('#input_$id')[0].checkValidity()) { 				
-					var val = (document.getElementById('input_$id')).value;
+		}
+		else {
+		
+			$script = "
+			<div id='$id' class='$class'>
+				<input id='input_$id' value='$currentvalue' $input_type $input_title $input_pattern $input_min $input_max $input_step onchange='setMQTTData$id()' $checked>
+				<label for='input_$id'>$label<span class='sw'></span></label>	
+				";
+				
+		}
+		
+		$script = "$script
+				<script type='text/javascript'>
 					
-					//if it is a checkbox we decide how to proceed here
-					if (document.getElementById('input_$id').type=='checkbox') {
-						if (isNaN(val)) {
-							val = document.getElementById('input_$id').checked?'true':'false';
-						}
-						else {
-							val = document.getElementById('input_$id').checked?1:0;
-						}
-					}
+				function setMQTTData$id() {
 					
-					jQuery.get('$url' + val,function( data ) {
-					
-					  	switch(data.status) {
-								case 'ok':
-									//jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
-									break;
-								
-								case 'buffered':
-//									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
-									break;
-								
-								default:
-//									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10060').text());
-									break;
+					if (jQuery('#input_$id')[0].checkValidity()) { 				
+						var val = (document.getElementById('input_$id')).value;
+						
+						//if it is a checkbox we decide how to proceed here
+						if (document.getElementById('input_$id').type=='checkbox') {
+							if (isNaN(val)) {
+								val = document.getElementById('input_$id').checked?'true':'false';
+							}
+							else {
+								val = document.getElementById('input_$id').checked?1:0;
+							}
 						}
-	  					
-	  					//location.reload();
-						})
-					  .fail(function(data) {
-					    alert( 'error' + data);
-					  })
-					  .always(function() {
-	//				    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
-					    
-					  });
-				 }
-	      	}  	
-	    	</script>
-		</div>";
+						
+						jQuery.get('$url' + val,function( data ) {
+						
+							switch(data.status) {
+									case 'ok':
+										//jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+										break;
+									
+									case 'buffered':
+	//									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10004').text());
+										break;
+									
+									default:
+	//									jQuery('#mqttcogs_set_btn_$id' ).val(jQuery('<div>').html('&#10060').text());
+										break;
+							}
+							
+							//location.reload();
+							})
+						  .fail(function(data) {
+							alert( 'error' + data);
+						  })
+						  .always(function() {
+		//				    jQuery('#mqttcogs_set_btn_$id').prop('disabled', false);
+							
+						  });
+					 }
+				}  	
+				</script>
+			</div>";
+			
 			
 		return $script;
 	}
@@ -1900,10 +1925,15 @@ class MySubscribeCallback extends MessageHandler
 			$publish_objectarr = apply_filters('mqttcogs_msg_in_pre',$publish_objectarr);
 		
 			if (!isset($publish_objectarr)) {
+			    Debug::Log(DEBUG::INFO,"MqttCogs no publish object {$topic}, {$msg}, {$qos}, {$retain}");
+	
 				return;
 			}
 
 			if (!is_array($publish_objectarr)) {
+			   
+			    Debug::Log(DEBUG::INFO, "MqttCogs isn't an array {$topic}, {$msg}, {$qos}, {$retain}");
+	
 				$publish_objectarr = array($publish_objectarr);
 			}
 		
@@ -1924,11 +1954,12 @@ class MySubscribeCallback extends MessageHandler
 						Debug::Log(DEBUG::INFO,
 		            "MqttCogs txtopic {$subnode}");
 		   
-	
+					// Debug::Log(DEBUG::INFO, "MqttCogs getting last n");
 					$therows = $this->mqttcogs_plugin->getLastN('buffer', $txtopic.'/'.$nodeid.'/%',10, 'ASC');
 
+                   // Debug::Log(DEBUG::INFO, "MqttCogs got last n");
+					
 					//rows are descending by datetime 
-					//$therows = array_reverse($therows);
 					$json = new stdClass();
 
 					foreach($therows as $row) {
@@ -1936,9 +1967,9 @@ class MySubscribeCallback extends MessageHandler
 						if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
 							$this->mqttcogs_plugin->deleteBufferById($row['id']);
 						}
-						else {
+						/*else {
 							break;
-						}
+						}*/
 					}
 				}
 			
