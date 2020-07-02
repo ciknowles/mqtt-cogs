@@ -730,7 +730,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.311');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.318');
 
 		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.3');
 				
@@ -1963,13 +1963,15 @@ class MySubscribeCallback extends MessageHandler
 					$json = new stdClass();
 
 					foreach($therows as $row) {
-					    
-						if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
-							$this->mqttcogs_plugin->deleteBufferById($row['id']);
+					    try
+						{
+							if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
+								$this->mqttcogs_plugin->deleteBufferById($row['id']);
+							}
+						} 
+						catch (Exception $e) {
+					        Debug::Log(DEBUG::ERR,$e->getMessage());
 						}
-						/*else {
-							break;
-						}*/
 					}
 				}
 			
