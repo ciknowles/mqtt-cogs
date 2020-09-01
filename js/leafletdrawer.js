@@ -16,7 +16,10 @@ if (allmaps && allmaps.length>0) {
 		else {
 			mapinfo.script = function (data, map, mapoptions) {
 				var markerArray = [];
-                var payload;
+				var data_datetime;
+				var data_payload;
+				var data_topic;
+
 				//loop through rows
 				for (var ridx=0;ridx<data.getNumberOfRows();ridx++) {
 					for (var cidx=1;cidx<data.getNumberOfColumns();cidx++) {
@@ -25,37 +28,47 @@ if (allmaps && allmaps.length>0) {
 							continue;
 						}
 						
-						//find a lat or lon
-						payload = data.getValue(ridx, cidx);
-						var lat = payload.lat?payload.lat:payload.latitude;
-						var lon = payload.lon?payload.lon:(payload.lng?payload.lng:payload.longitude);
+						//extract the bits we understand
+						data_datetime =  data.getValue(ridx,0);
+						data_payload = data.getValue(ridx,cidx) ;
+						data_topic = data.getColumnId(cidx);
+
+						//Firstly, we assume that the payload is an object and contains 
+						//a lng, lat or lon lat property
+						var lnglat = {
+							lat: data_payload.lat?data_payload.lat:data_payload.latitude,
+							lng: data_payload.lon?data_payload.lon:(data_payload.lng?data_payload.lng:data_payload.longitude)
+						}
 						
-						//lon lat from payload so add marker and return
-						if (lat && lon) {
-							markerArray.push(L.marker(new Array(lat, lon))
-							.bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)));
+						//If it was an object. Not sure how to output the target value here.
+						//WIP
+						if (lnglat.lat && lnglat.lng) {
+							markerArray.push(mapinfo.makeMarker(lnglat.lng, lnglat.lat, data_topic, data_datetime, data_payload)
+							.openPopup());
 							continue;
 						}
 						
-						//lon lat from lnglat column property
-						payload= data.getColumnProperty(cidx, 'lnglat');
-						if (payload) {		
+						//Is a simple object OR doesn't contain lng lat in payload
+						//try and find lng lat from column property
+						var colproplnglat= data.getColumnProperty(cidx, 'lnglat');
+						if (colproplnglat) {		
 							//is a simple comma delimited value
-							if (!payload.type) {
-								payload = payload.split(',') ;
-								if (payload.length==2) {
-									lon = parseInt(payload[0]);
-									lat = parseInt(payload[1]);
+							if (!colproplnglat.type) {
+								colproplnglat = payload.split(',') ;
+								if (colproplnglat.length==2) {
+									lnglat.lng = parseInt(payload[0]);
+									lnglat.lat = parseInt(payload[1]);
 								}
 								//lon lat from lnglat field so return here
 								if (lat && lon) {
-									markerArray.push(L.marker(new Array(lat, lon)).bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)).openPopup());
+									markerArray.push(mapinfo.makeMarker(lnglat.lng, lnglat.lat, data_topic, data_datetime, data_payload)
+									.openPopup());
 									continue;
 								}					
 							}
 							//shape from geoJSON
 							else {
-								markerArray.push(L.geoJSON(payload).bindPopup(data.getColumnId(cidx) + ' @ ' + data.getValue(ridx,0)));
+								markerArray.push(mapinfo.makeGeoJSONMarker(lnglat.lng, lnglat.lat, data_topic, data_datetime, data_payload));
 							}
 						}
 					}	
@@ -79,6 +92,19 @@ if (allmaps && allmaps.length>0) {
 				.addTo(mapinfo.map);
 			}
 		}
+
+		mapinfo.makeMarker = function (lng, lat, data_topic, data_datetime, data_payload) {
+			return L.marker(new Array(lat, lng)).bindPopup(mapinfo.makeFlag(data_topic, data_datetime, data_payload));
+		}
+
+		mapinfo.makeGeoJSONMarker = function (lng, lat, data_topic, data_datetime, data_payload) {
+			return L.geoJSON(colproplnglat).bindPopup(mapinfo.makeFlag(data_topic, data_datetime, data_payload));
+		}
+
+		mapinfo.makeFlag = function(data_topic, data_datetime, data_payload) {
+			return data_payload + ' @ ' + data_datetime;
+		}
+
 
 		mapinfo.responseHandler = function (response) {
 		    var self = this;

@@ -113,21 +113,44 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     }
     
 	public function setupLogging() {
-		//error_log("setupLogging");	
 		switch($this->getOption("MQTT_Debug", "Info")) {
         		    case "All":
-        		      
         		        Debug::SetLogPriority(Debug::ALL);	
 						break;
         		    case "Info":
-        		      
         		        Debug::SetLogPriority(Debug::INFO);	
 						break;
         		    case "None":
         		        Debug::Disable();
-					
 						break;
-        }
+		}
+		
+	//	Debug::SetHandler(array(&$this, 'dblog'));
+	}
+
+	public function dblog($log_msg) {
+		global $wpdb;
+		$tableName = $this->prefixTableName('data');
+
+		//$utc = date_format($publish_object->getDateTime(), 'Y-m-d H:i:s');
+
+		
+		$wpdb->insert(
+			$tableName,
+			array(
+					'utc' => gmdate( 'Y-m-d H:i:s'),
+					'topic' => '$log',
+					'payload' => $log_msg,
+					'qos' =>0,
+					'retain' => 0
+			),
+			array(
+					'%s',
+					'%s',
+					'%s'
+			)
+			);
+	
 	}
 	
     public function getPluginDisplayName() {
@@ -209,6 +232,56 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     public function upgrade() {
     }
 
+
+	    /**
+     * Creates HTML for the Administration page to set options for this plugin.
+     * Override this method to create a customized page.
+     * @return void
+     */
+    public function settingsPage() {
+		// check user capabilities
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		//Get the active tab from the $_GET param
+		$default_tab = null;
+		$tab = isset($_GET['tab']) ? $_GET['tab'] : $default_tab;
+
+		?>
+		<!-- Our admin page content should all be inside .wrap -->
+		<div class="wrap">
+			<!-- Print the page title -->
+			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+			<!-- Here are our tabs -->
+			<nav class="nav-tab-wrapper">
+			<a href="?page=MqttCogs_PluginSettings" class="nav-tab <?php if($tab===null):?> nav-tab-active <?php endif; ?> ">Settings</a>
+			<a href="?page=MqttCogs_PluginSettings&tab=mqttdata" class="nav-tab <?php if($tab==='mqttdata'):?>nav-tab-active<?php endif; ?> ">MQTT Data</a>
+			<a href="?page=MqttCogs_PluginSettings&tab=log" class="nav-tab <?php if($tab==='log'):?>nav-tab-active<?php endif; ?> ">MQTT Log</a>
+			</nav>
+
+			<div class="tab-content">
+			<?php switch($tab) :
+			case 'mqttdata':
+				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="%"][/mqttcogs_drawdatatable]');
+				break;
+			case 'log':
+				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="$log"][/mqttcogs_drawdatatable]');
+				//echo do_shortcode('[mqttcogs_data pivot="false" order="DESC" limit="10" topics="mqttlog"]');
+				break;
+			default:
+				parent::settingsPage();
+				//echo 'Default tab';
+				break;
+			endswitch; ?>
+			</div>
+		</div>
+		<?php
+
+    }
+
+
+
     public function addActionsAndFilters() {
 
         // Add options administration page
@@ -225,9 +298,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         // Add Actions & Filters
         // http://plugin.michael-simpson.com/?page_id=37
     	add_action('wp_enqueue_scripts', array(&$this, 'enqueueStylesAndScripts'));
-	
-	
-        //add_action( 'admin_enqueue_scripts',  array(&$this, 'enqueueStylesAndScripts_admin'));
+        add_action( 'admin_enqueue_scripts',  array(&$this, 'enqueueStylesAndScripts'));
         //
 	
 	    //makes sure mqtt reader is active
@@ -730,7 +801,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.311');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.318');
 
 		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.3');
 				
@@ -1110,16 +1181,17 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 	
 	private function replaceWordpressUser($somestring) {
-	     $current_user = wp_get_current_user();
+		return $somestring;
+	     /*$current_user = wp_get_current_user();
 	     if ( !($current_user instanceof WP_User) )
             return $somestring;
      
         foreach($current_user as $key => $value) {
             if (is_numeric($value) || is_string($value)) {
-                $somestring = str_replace('{'.$key.'}', strval($value), $somestring);    
+                $somestring = str_replace(strval($value), '{'.$key.'}', $somestring);    
             }
         }
-        return $somestring;
+        return $somestring;*/
 	}
 	
 	public function shortcodeSet($atts,$content) {
@@ -1379,10 +1451,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	}
 	
 	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC') {
-	    global $wpdb;
+		global $wpdb;
+		
 	    $table_name = $this->prefixTableName('data');	
 	  
-    	
 	    if (is_numeric($from)) {      
 	    	$from = time() + floatval($from)*86400;
 	    	$from = date('Y-m-d H:i:s', $from);
@@ -1421,42 +1493,38 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
     	    foreach($topics as $idx=>$fulltopic) {
 				$post = $this->getPostBySlug($fulltopic);
-	
             	$splitTopic = $this->splitTopic($fulltopic);
         		$payloadfield = $splitTopic["topic_sql"];
-				
 				$agg = ($idx<count($aggregations))?"$aggregations[$idx]($payloadfield) as payload":"$payloadfield as payload";
 				
-							
+											
 				if (empty($group)) {
 					$sql = $wpdb->prepare("SELECT `utc` as dtm,$agg from $table_name
-    	    	 						WHERE topic=%s 
-    	    	 						AND ((utc>=%s OR %s='') 
+    	    	 						WHERE topic LIKE %s
+				 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
     	    	 						AND $payloadfield IS NOT NULL
     	    	 						order by utc $order limit %d",
-    	    	 						
-    	    	 						$splitTopic["topic_core"],
+										 $splitTopic["topic_core"],
     	    	 						$from,
     	    	 						$from,
     	    	 						$to,
     	    	 						$to,
     	    	 						$limit			
-    	    	 				        );
-    	    	 
+										 );
 				} 
 				else {
 				    // DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF(HOUR, '1970-01-01 00:00:00', '2020-03-19 18:12:00') HOUR)
 				    //EXTRACT($group FROM IFNULL(CONVERT_TZ(`utc`, 'GMT', %s), `utc`)) as grouping,$agg from $table_name
     	    	
 					$sql = $wpdb->prepare("SELECT DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF($group, '1970-01-01 00:00:00', `utc`) $group) as dtm, $agg from $table_name
-										WHERE topic=%s 
-    	    	 						AND ((utc>=%s OR %s='') 
+										WHERE topic LIKE %s 
+				 						AND ((utc>=%s OR %s='') 
     	    	 						AND (utc<=%s OR %s='')) 
     	    	 						AND $payloadfield IS NOT NULL
 										GROUP BY dtm
     	    	 						order by dtm $order limit %d",
-    	    	 						$splitTopic["topic_core"],
+										 $splitTopic["topic_core"],
     	    	 						$from,
     	    	 						$from,
     	    	 						$to,
@@ -1501,7 +1569,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 											$p = $p.'{"lnglat":'.$lnglat.'}';
 										}
 							        }
-									Debug::Log(DEBUG::INFO, $p);
+								//	Debug::Log(DEBUG::INFO, $p);
 		
 							    }
 							    
@@ -1519,7 +1587,15 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 								$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
 							}
 							else {
-								$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
+
+								//does it look like a javascript object
+								json_decode($row['payload']);
+								if (json_last_error() == JSON_ERROR_NONE) {
+									$o->c[] = json_decode('{"v":'.$row['payload'].'}');  
+								}
+								else {
+									$o->c[] = json_decode('{"v":"'.$row['payload'].'"}');   
+								}
 							}
 						}
 						else {
@@ -1882,7 +1958,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
-		$found = strpos($topicorslug, '$');
+		$found = strpos($topicorslug, '$', 1); //must be at least one character before it
 	    if ($found === FALSE) {
 	        $ret["topic_core"]=$topicorslug;
 	    }
@@ -1963,13 +2039,15 @@ class MySubscribeCallback extends MessageHandler
 					$json = new stdClass();
 
 					foreach($therows as $row) {
-					    
-						if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
-							$this->mqttcogs_plugin->deleteBufferById($row['id']);
+					    try
+						{
+							if ($this->mqttcogs_plugin->sendMqttInternal($row['id'],$row['topic'], $row['payload'], $row['qos'],$row['retain'], false, $json)) {						
+								$this->mqttcogs_plugin->deleteBufferById($row['id']);
+							}
+						} 
+						catch (Exception $e) {
+					        Debug::Log(DEBUG::ERR,$e->getMessage());
 						}
-						/*else {
-							break;
-						}*/
 					}
 				}
 			

@@ -43,7 +43,6 @@ namespace sskaje\mqtt;
  */
 class Debug
 {
-
     const NONE   = 0;
     const ERR    = 1;
     const WARN   = 2;
@@ -60,6 +59,8 @@ class Debug
      * @var bool
      */
     static protected $enabled = false;
+	
+	static protected $handler = NULL;
 
     /**
      * Enable Debug
@@ -93,6 +94,11 @@ class Debug
     {
         self::$priority = (int) $priority;
     }
+	
+	static public function SetHandler( $handler) 
+	{
+		self::$handler  = $handler;
+	}
 
 	
 	static public function ObjToStr($someVar) 
@@ -141,7 +147,12 @@ class Debug
         }
 
         if ($priority <= self::$priority) {
-            error_log($log_msg);
+			if (self::$handler) {
+                call_user_func_array(self::$handler, array($log_msg));
+			}
+			else {
+				error_log($log_msg);
+			}
         }
     }
 }
