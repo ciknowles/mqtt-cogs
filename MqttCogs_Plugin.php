@@ -801,7 +801,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		wp_register_style('leafletcss', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.css');
 		wp_register_script('leaflet', 'https://unpkg.com/leaflet@1.5.1/dist/leaflet.js');
-		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.318');
+		wp_register_script('leafletdrawer', plugins_url('/js/leafletdrawer.js', __FILE__), array(), '2.319');
 
 		wp_register_script('htmldrawer', plugins_url('/js/htmldrawer.js', __FILE__), array(), '2.3');
 				

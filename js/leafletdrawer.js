@@ -68,7 +68,7 @@ if (allmaps && allmaps.length>0) {
 							}
 							//shape from geoJSON
 							else {
-								markerArray.push(mapinfo.makeGeoJSONMarker(lnglat.lng, lnglat.lat, data_topic, data_datetime, data_payload));
+								markerArray.push(mapinfo.makeGeoJSONMarker(colproplnglat, data_topic, data_datetime, data_payload));
 							}
 						}
 					}	
@@ -97,7 +97,7 @@ if (allmaps && allmaps.length>0) {
 			return L.marker(new Array(lat, lng)).bindPopup(mapinfo.makeFlag(data_topic, data_datetime, data_payload));
 		}
 
-		mapinfo.makeGeoJSONMarker = function (lng, lat, data_topic, data_datetime, data_payload) {
+		mapinfo.makeGeoJSONMarker = function (colproplnglat, data_topic, data_datetime, data_payload) {
 			return L.geoJSON(colproplnglat).bindPopup(mapinfo.makeFlag(data_topic, data_datetime, data_payload));
 		}
 
