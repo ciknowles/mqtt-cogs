@@ -286,12 +286,16 @@ class MQTT
             return false;
         }
 
+        
+        
         if (!is_callable(array($this->handler, $name))) {
             Debug::Log(Debug::ERR, "call_handler function {$name} NOT CALLABLE");
             return false;
         }
-
+       
+       
         call_user_func_array(array($this->handler, $name), $params);
+         Debug::Log(Debug::ERR, "calling handler function {$name}");
         return true;
     }
 
@@ -400,7 +404,7 @@ class MQTT
     public function disconnect()
     {
         Debug::Log(Debug::DEBUG, 'disconnect()');
-
+        try {
         $this->simpleCommand(Message::DISCONNECT);
 
         /*
@@ -408,10 +412,13 @@ class MQTT
          MUST close the Network Connection [MQTT-3.14.4-1].
          MUST NOT send any more Control Packets on that Network Connection [MQTT-3.14.4-2].
          */
-        $this->socket->close();
-
-        $this->call_handler('disconnect', array($this));
-
+         $this->call_handler('disconnect', array($this));
+         $this->socket->close();
+        }
+        catch (\Exception $e) {
+            
+        }
+           
         return true;
     }
 
@@ -427,7 +434,7 @@ class MQTT
         if ($close_current) {
             Debug::Log(Debug::DEBUG, 'reconnect(): close current');
             $this->disconnect();
-            $this->socket->close();
+            //$this->socket->close();
         }
 
         return $this->connect();
@@ -1138,8 +1145,8 @@ class MQTT
 
             } catch (Exception\NetworkError $e) {
                 Debug::Log(Debug::NOTICE, 'loop(): Connection lost.');
-                $this->reconnect();
-                $this->subscribe($this->topics);
+                //$this->reconnect();
+                //$this->subscribe($this->topics);
             } catch (\Exception $e) {
                 throw $e;
             }

@@ -854,6 +854,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}
 		
 		$this->setupLogging();
+			  Debug::Log(DEBUG::DEBUG, 'checking');
 	  $file = './'.$this->prefixTableName('lock.pid');	
 		$lock = new flock\Lock($file);
 		
@@ -888,13 +889,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				while(($this->mqtt) && (microtime(true)-$gmt_time<$recycle_secs) && $mqtt->loop()) {
 					set_time_limit(0);
 				}
-				
+				Debug::Log(DEBUG::ERR, "wp forced disconnect");
 				$mqtt->disconnect();
 			}
 		}
 		
 		catch (Exception $e) {
-		      Debug::Log(DEBUG::ERR, $e->getMessage());
+		      Debug::Log(DEBUG::ERR,'someother'.$e->getMessage());
 				if (!empty($mqtt)) {
 					$mqtt->disconnect();
 				}
@@ -906,7 +907,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 						$lock->release();	
 					}	
 					catch (Exception $ee) {
-						   Debug::Log(DEBUG::DEBUG, $ee->getMessage());
+						   Debug::Log(DEBUG::DEBUG, 'something'.$ee->getMessage());
 					}
 				}
 		}
@@ -920,10 +921,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
     public function shutdownHandler() //will be called when php script ends.
     {
+        Debug::Log(DEBUG::DEBUG, 'Php page shutting down');
         $lasterror = error_get_last();
-	    //$error = "[SHUTDOWN] lvl:" . $lasterror['type'] . " | msg:" . $lasterror['message'] . " | file:" . $lasterror['file'] . " | ln:" . $lasterror['line'];            
         
-         Debug::Log(DEBUG::ERR, var_export($lasterror, TRUE));  
+        if (!is_null($lasterror))
+	        Debug::Log(DEBUG::ERR, var_export($lasterror, TRUE));  
     }
 	
 	public function buildMQTTClient($cid) {
@@ -2046,6 +2048,7 @@ class MySubscribeCallback extends MessageHandler
 							}
 						} 
 						catch (Exception $e) {
+						    Debug::Log(DEBUG::ERR,"SDF");
 					        Debug::Log(DEBUG::ERR,$e->getMessage());
 						}
 					}
@@ -2082,6 +2085,8 @@ class MySubscribeCallback extends MessageHandler
 			}
 		}
 		catch (Exception $e) {
+		        Debug::Log(DEBUG::ERR,"ERROR SENDING");
+	
 		        Debug::Log(DEBUG::ERR,$e->getMessage());
 	
 					//force loop to exit
