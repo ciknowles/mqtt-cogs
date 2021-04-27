@@ -125,7 +125,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 						break;
 		}
 		
-	//	Debug::SetHandler(array(&$this, 'dblog'));
+		Debug::SetHandler(array(&$this, 'dblog'));
 	}
 
 	public function dblog($log_msg) {

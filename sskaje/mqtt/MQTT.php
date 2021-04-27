@@ -286,16 +286,12 @@ class MQTT
             return false;
         }
 
-        
-        
         if (!is_callable(array($this->handler, $name))) {
             Debug::Log(Debug::ERR, "call_handler function {$name} NOT CALLABLE");
             return false;
         }
        
-       
         call_user_func_array(array($this->handler, $name), $params);
-         Debug::Log(Debug::ERR, "calling handler function {$name}");
         return true;
     }
 
