@@ -263,7 +263,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			<div class="tab-content">
 			<?php switch($tab) :
 			case 'mqttdata':
-				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="%"][/mqttcogs_drawdatatable]');
+				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="%" ][/mqttcogs_drawdatatable]');
 				break;
 			case 'log':
 				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="$log"][/mqttcogs_drawdatatable]');
@@ -384,8 +384,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
         if ($column_name == 'type') {
             $tax_id = get_post_meta( $post_id, 'meta-type', true );
-            $term = get_term_by( 'term_taxonomy_id', $tax_id, 'thingtypes');
-            echo  $term->name;
+			$term = get_term_by( 'term_taxonomy_id', $tax_id, 'thingtypes');
+			if (!isempty($term))
+            	echo  $term->name;
         }
     }
 
@@ -889,7 +890,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				while(($this->mqtt) && (microtime(true)-$gmt_time<$recycle_secs) && $mqtt->loop()) {
 					set_time_limit(0);
 				}
-				Debug::Log(DEBUG::ERR, "wp forced disconnect");
+				//Debug::Log(DEBUG::DEBUG, "wp forced disconnect");
 				$mqtt->disconnect();
 			}
 		}
