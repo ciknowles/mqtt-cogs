@@ -263,7 +263,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			<div class="tab-content">
 			<?php switch($tab) :
 			case 'mqttdata':
-				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="%" ][/mqttcogs_drawdatatable]');
+				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="%"][/mqttcogs_drawdatatable]');
 				break;
 			case 'log':
 				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="$log"][/mqttcogs_drawdatatable]');
@@ -384,9 +384,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 
         if ($column_name == 'type') {
             $tax_id = get_post_meta( $post_id, 'meta-type', true );
-			$term = get_term_by( 'term_taxonomy_id', $tax_id, 'thingtypes');
-			if (!isempty($term))
-            	echo  $term->name;
+            $term = get_term_by( 'term_taxonomy_id', $tax_id, 'thingtypes');
+            echo  $term->name;
         }
     }
 
@@ -856,7 +855,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		
 		$this->setupLogging();
 			  Debug::Log(DEBUG::DEBUG, 'checking');
-	  $file = './'.$this->prefixTableName('lock.pid');	
+	  	$file = './'.$this->prefixTableName('lock.pid');	
 		$lock = new flock\Lock($file);
 		
 		// Non-blocking case. Acquire lock if it's free, otherwse exit immediately
@@ -890,15 +889,20 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 				while(($this->mqtt) && (microtime(true)-$gmt_time<$recycle_secs) && $mqtt->loop()) {
 					set_time_limit(0);
 				}
-				//Debug::Log(DEBUG::DEBUG, "wp forced disconnect");
+				Debug::Log(DEBUG::DEBUG, "wp forced disconnect");
 				$mqtt->disconnect();
 			}
 		}
 		
 		catch (Exception $e) {
-		      Debug::Log(DEBUG::ERR,'someother'.$e->getMessage());
+		      Debug::Log(DEBUG::ERR,'Error during watchdog, disconnecting'.$e->getMessage());
 				if (!empty($mqtt)) {
-					$mqtt->disconnect();
+					try {
+						$mqtt->disconnect();
+					}
+					catch (Exception $eee) {
+						//squash this one
+					}
 				}
 		}
 		finally {
@@ -908,7 +912,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 						$lock->release();	
 					}	
 					catch (Exception $ee) {
-						   Debug::Log(DEBUG::DEBUG, 'something'.$ee->getMessage());
+						   Debug::Log(DEBUG::DEBUG, 'Error releasing watchdog lock'.$ee->getMessage());
 					}
 				}
 		}
@@ -917,7 +921,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
     public function errorHandler($error_level, $error_message, $error_file, $error_line, $error_context)
     {
         $error = "lvl: " . $error_level . " | msg:" . $error_message . " | file:" . $error_file . " | ln:" . $error_line;
-	      Debug::Log(DEBUG::ERR, $error);
+	    Debug::Log(DEBUG::ERR, $error);
     }
 
     public function shutdownHandler() //will be called when php script ends.
@@ -1961,7 +1965,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
-		$found = strpos($topicorslug, '$', 1); //must be at least one character before it
+		$found = (strlen($topicorslug)>0) && strpos($topicorslug, '$', 1); //must be at least one character before it
 	    if ($found === FALSE) {
 	        $ret["topic_core"]=$topicorslug;
 	    }
@@ -2049,8 +2053,7 @@ class MySubscribeCallback extends MessageHandler
 							}
 						} 
 						catch (Exception $e) {
-						    Debug::Log(DEBUG::ERR,"SDF");
-					        Debug::Log(DEBUG::ERR,$e->getMessage());
+						    Debug::Log(DEBUG::ERR,"Error publishing to topic ".$row['topic']." ".$e->getMessage());
 						}
 					}
 				}
@@ -2086,11 +2089,9 @@ class MySubscribeCallback extends MessageHandler
 			}
 		}
 		catch (Exception $e) {
-		        Debug::Log(DEBUG::ERR,"ERROR SENDING");
-	
-		        Debug::Log(DEBUG::ERR,$e->getMessage());
-	
-					//force loop to exit
+			Debug::Log(DEBUG::ERR,"ERROR publishing ".$e->getMessage());
+
+			//force loop to exit
 			$this->mqttcogs_plugin->mqtt = null;
 			
 			//attempt graceful disconnect
