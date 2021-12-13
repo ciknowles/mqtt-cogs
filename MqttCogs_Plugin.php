@@ -132,9 +132,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		global $wpdb;
 		$tableName = $this->prefixTableName('data');
 
-		//$utc = date_format($publish_object->getDateTime(), 'Y-m-d H:i:s');
-
-		
 		$wpdb->insert(
 			$tableName,
 			array(
@@ -148,9 +145,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 					'%s',
 					'%s',
 					'%s'
-			)
-			);
-	
+				)
+			);	
 	}
 	
     public function getPluginDisplayName() {
@@ -257,17 +253,16 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			<nav class="nav-tab-wrapper">
 			<a href="?page=MqttCogs_PluginSettings" class="nav-tab <?php if($tab===null):?> nav-tab-active <?php endif; ?> ">Settings</a>
 			<a href="?page=MqttCogs_PluginSettings&tab=mqttdata" class="nav-tab <?php if($tab==='mqttdata'):?>nav-tab-active<?php endif; ?> ">MQTT Data</a>
-			<a href="?page=MqttCogs_PluginSettings&tab=log" class="nav-tab <?php if($tab==='log'):?>nav-tab-active<?php endif; ?> ">MQTT Log</a>
+			<!-- a href="?page=MqttCogs_PluginSettings&tab=log" class="nav-tab <?php if($tab==='log'):?>nav-tab-active<?php endif; ?> ">MQTT Log</a -->
 			</nav>
 
 			<div class="tab-content">
 			<?php switch($tab) :
 			case 'mqttdata':
-				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="%"][/mqttcogs_drawdatatable]');
+				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="100" topics="%" raw="true"][/mqttcogs_drawdatatable]');
 				break;
 			case 'log':
-				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="500" topics="$log"][/mqttcogs_drawdatatable]');
-				//echo do_shortcode('[mqttcogs_data pivot="false" order="DESC" limit="10" topics="mqttlog"]');
+				echo do_shortcode('[mqttcogs_drawdatatable options="{width: \'100%\'}][mqttcogs_data order="DESC" limit="100" topics="$log"][/mqttcogs_drawdatatable]');
 				break;
 			default:
 				parent::settingsPage();
@@ -1145,7 +1140,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    }*/
 	    
 	       
-	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order']);    
+	    $table = $this->getTopN($_GET['from'], $_GET['to'], $_GET['limit'], $_GET['topics'],$_GET['aggregations'], $_GET['group'], $_GET['order'], $_GET['raw']);    
 	  
 	    $json = new stdClass();        
 	    $json->status = 'ok';
@@ -1370,7 +1365,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		], $atts, NULL);
 	
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],1,$atts['topic'],$atts['aggregations'],$atts['group'],$atts['order']);
+		$table = $this->getTopN($atts['from'],$atts['to'],1,$atts['topic'],$atts['aggregations'],$atts['group'],$atts['order'], false);
 	
 		if (sizeof($table->rows) == 0) 
 			return '';
@@ -1408,11 +1403,12 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                     'to'=>'',
 										 'aggregations' =>'',
 										 'group' => '',
+										 'raw' => false,
 	  									 'order'=>'DESC'
 	                                 ], $atts, NULL);
 
 		//whattypes of queries
-		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order']);	
+		$table = $this->getTopN($atts['from'],$atts['to'],$atts['limit'],$atts['topics'],$atts['aggregations'], $atts['group'],$atts['order'], $atts['raw']);	
 		$jsonret = json_encode($table);   
 	    $jsonret = str_replace('"DSTART', 'new Date', $jsonret);
 	    $jsonret = str_replace('DEND"', '', $jsonret);
@@ -1457,7 +1453,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$wpdb->delete( $table_name, array( 'id' => $id ) );
 	}
 	
-	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC') {
+	public function getTopN($from, $to, $limit, $topics, $aggregations = '', $group='', $order = 'ASC', $raw = false) {
 		global $wpdb;
 		
 	    $table_name = $this->prefixTableName('data');	
@@ -1487,134 +1483,121 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    $json->cols = array();
 	    $json->rows = array();
 	    
-	   	
-    	    //add the datetime column or grouping column
-		//	if (empty($group)) {
-				$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');
-		//	}
-		//	else {
-		//		$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"number"}');
-		//	}
-			
-			$tzs = get_option('timezone_string');
+		if ($raw) {
+			$json->cols[] = json_decode('{"id":"topic", "label":"topic", "type":"string"}');		
+		}
 
-    	    foreach($topics as $idx=>$fulltopic) {
-				$post = $this->getPostBySlug($fulltopic);
-            	$splitTopic = $this->splitTopic($fulltopic);
-        		$payloadfield = $splitTopic["topic_sql"];
-				$agg = ($idx<count($aggregations))?"$aggregations[$idx]($payloadfield) as payload":"$payloadfield as payload";
-				
+		$json->cols[] = json_decode('{"id":"utc", "label":"utc", "type":"datetime"}');	
+		$tzs = get_option('timezone_string');
+
+		foreach($topics as $idx=>$fulltopic) {
+			$post = $this->getPostBySlug($fulltopic);
+			$splitTopic = $this->splitTopic($fulltopic);
+			$payloadfield = $splitTopic["topic_sql"];
+			$agg = ($idx<count($aggregations))?"$aggregations[$idx]($payloadfield) as payload":"$payloadfield as payload";
 											
-				if (empty($group)) {
-					$sql = $wpdb->prepare("SELECT `utc` as dtm,$agg from $table_name
-    	    	 						WHERE topic LIKE %s
-				 						AND ((utc>=%s OR %s='') 
-    	    	 						AND (utc<=%s OR %s='')) 
-    	    	 						AND $payloadfield IS NOT NULL
-    	    	 						order by utc $order limit %d",
-										 $splitTopic["topic_core"],
-    	    	 						$from,
-    	    	 						$from,
-    	    	 						$to,
-    	    	 						$to,
-    	    	 						$limit			
-										 );
-				} 
-				else {
-				    // DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF(HOUR, '1970-01-01 00:00:00', '2020-03-19 18:12:00') HOUR)
-				    //EXTRACT($group FROM IFNULL(CONVERT_TZ(`utc`, 'GMT', %s), `utc`)) as grouping,$agg from $table_name
-    	    	
-					$sql = $wpdb->prepare("SELECT DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF($group, '1970-01-01 00:00:00', `utc`) $group) as dtm, $agg from $table_name
-										WHERE topic LIKE %s 
-				 						AND ((utc>=%s OR %s='') 
-    	    	 						AND (utc<=%s OR %s='')) 
-    	    	 						AND $payloadfield IS NOT NULL
-										GROUP BY dtm
-    	    	 						order by dtm $order limit %d",
-										 $splitTopic["topic_core"],
-    	    	 						$from,
-    	    	 						$from,
-    	    	 						$to,
-    	    	 						$to,
-    	    	 						$limit			
-    	    	 				        );
-				}
-    	    	Debug::Log(DEBUG::DEBUG, $sql);
-		
-    	    	$therows =  $wpdb->get_results($sql, ARRAY_A );
-				$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $splitTopic["topic"]);
+			if (empty($group)) {
+				$sql = $wpdb->prepare("SELECT `topic` as topic,`utc` as dtm,$agg from $table_name
+									WHERE topic LIKE %s
+									AND ((utc>=%s OR %s='') 
+									AND (utc<=%s OR %s='')) 
+									AND $payloadfield IS NOT NULL
+									order by utc $order limit %d",
+										$splitTopic["topic_core"],
+									$from,
+									$from,
+									$to,
+									$to,
+									$limit			
+										);
+			} 
+			else { 	    	
+				$sql = $wpdb->prepare("SELECT `topic` as topic, DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF($group, '1970-01-01 00:00:00', `utc`) $group) as dtm, $agg from $table_name
+									WHERE topic LIKE %s 
+									AND ((utc>=%s OR %s='') 
+									AND (utc<=%s OR %s='')) 
+									AND $payloadfield IS NOT NULL
+									GROUP BY dtm
+									order by dtm $order limit %d",
+										$splitTopic["topic_core"],
+									$from,
+									$from,
+									$to,
+									$to,
+									$limit			
+									);
+			}
+			Debug::Log(DEBUG::DEBUG, $sql);
+	
+			$therows =  $wpdb->get_results($sql, ARRAY_A );
+			$therows = apply_filters('mqttcogs_shortcode_pre',$therows, $splitTopic["topic"]);
 
-				$colset = false;
+			$colset = false;
+			
+			foreach($therows as $row) {
+				$o = new stdClass();
+				$o->c = array();		
+				if ($raw) {			
+					$o->c[] = json_decode('{"v":"'.$row["topic"].'"}');
+				}
+
+				$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["dtm"])*1000).')DEND"}');
 				
-				foreach($therows as $row) {
-					$o = new stdClass();
-					$o->c = array();
-					
-		    		//add grouping
-		//			if (empty($group)) {
-						$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["dtm"])*1000).')DEND"}');
-		//			}
-		//			else {
-		//				$o->c[] = json_decode('{"v":"DSTART('.(strtotime($row["grouping"])).')DEND"}');
-		//			}
-					
-					//loop through columns
-					for($i = 0; $i < count($topics); ++$i){
-						if ($i==$index) {
-							if (!$colset) {
-			         		    
-			         		    //add on lng,lat from associated post as column property
-			         		    $p = "";
-							    if (!is_null($post)) {
-							        $lnglat = get_post_meta($post->ID, 'meta-lnglat', true);
-							        $p = ',"p":';
-							        if (!is_null($lnglat)) {
-										if (strpos($lnglat, '{')===FALSE) {
-											$p = $p.'{"lnglat":"'.$lnglat.'"}';
-										}
-										else {
-											$p = $p.'{"lnglat":'.$lnglat.'}';
-										}
-							        }
-								//	Debug::Log(DEBUG::INFO, $p);
-		
-							    }
-							    
-								if (is_numeric($row['payload'])) {
-									//add the next column definition
-									$json->cols[] = json_decode('{"id":"'.$splitTopic["topic"].'","type":"number"'.$p.'}');	
+				//loop through columns
+				for($i = 0; $i < count($topics); ++$i){
+					if ($i==$index) {
+						if (!$colset) {
+							
+							//add on lng,lat from associated post as column property
+							$p = "";
+							if (!is_null($post)) {
+								$lnglat = get_post_meta($post->ID, 'meta-lnglat', true);
+								$p = ',"p":';
+								if (!is_null($lnglat)) {
+									if (strpos($lnglat, '{')===FALSE) {
+										$p = $p.'{"lnglat":"'.$lnglat.'"}';
+									}
+									else {
+										$p = $p.'{"lnglat":'.$lnglat.'}';
+									}
 								}
-								else {
-									//add the next column definition
-									$json->cols[] = json_decode('{"id":"'.$splitTopic["topic"].'","type":"string"'.$p.'}');	
-								}
-								$colset = true;
 							}
+							
 							if (is_numeric($row['payload'])) {
-								$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
+								//add the next column definition
+								$json->cols[] = json_decode('{"id":"'.$splitTopic["topic"].'","type":"number"'.$p.'}');	
 							}
 							else {
-
-								//does it look like a javascript object
-								json_decode($row['payload']);
-								if (json_last_error() == JSON_ERROR_NONE) {
-									$o->c[] = json_decode('{"v":'.$row['payload'].'}');  
-								}
-								else {
-									$o->c[] = json_decode('{"v":"'.$row['payload'].'"}');   
-								}
+								//add the next column definition
+								$json->cols[] = json_decode('{"id":"'.$splitTopic["topic"].'","type":"string"'.$p.'}');	
 							}
+							$colset = true;
+						}
+						if (is_numeric($row['payload'])) {
+							$o->c[] = json_decode('{"v":'.$row['payload'].'}');   
 						}
 						else {
-							$o->c[] = json_decode('{"v":null}');  
+
+							//does it look like a javascript object
+							json_decode($row['payload']);
+							if (json_last_error() == JSON_ERROR_NONE) {
+								$o->c[] = json_decode('{"v":'.$row['payload'].'}');  
+							}
+							else {
+								$o->c[] = json_decode('{"v":"'.$row['payload'].'"}');   
+							}
 						}
-					}	
-					
-					$json->rows[] =$o;
-				} //row
+					}
+					else {
+						$o->c[] = json_decode('{"v":null}');  
+					}
+				}	
+				
+				$json->rows[] =$o;
+			} //row
     	      
-    	    $index++; 
-    	    } //topic	 
+		$index++; 
+		} //topic	 
 	    
 	   return $json;    
 	
@@ -1636,12 +1619,13 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	                                     'to'=>'',
 										 'aggregations' => '',
 										 'group' => '',
+										 'raw'=>false,
 	  									 'order'=>'DESC'
 	                                 ], $atts, NULL);
 	   $limit = $atts['limit'];
 	   $topics = $atts['topics'];
 	 
-	   return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"]);                                                              
+	   return $this->getAjaxUrl($atts['action'].'&limit='.$limit.'&topics='.$topics.'&from='.$atts["from"].'&to='.$atts["to"].'&aggregations='.$atts["aggregations"].'&group='.$atts["group"].'&order='.$atts["order"].'&raw='.$atts["raw"]);                                                              
 	} 
 	
 	
@@ -1965,8 +1949,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
-		$found = (strlen($topicorslug)>0) && strpos($topicorslug, '$', 1); //must be at least one character before it
-	    if ($found === FALSE) {
+		$found = /*(strlen($topicorslug)>0) &&*/ strpos($topicorslug, '$', 1); //must be at least one character before it
+	    
+		
+		if ($found === FALSE) {
 	        $ret["topic_core"]=$topicorslug;
 	    }
 	    else {

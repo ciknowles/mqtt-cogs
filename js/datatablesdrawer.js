@@ -4,12 +4,9 @@ if (alltables && alltables.length>0) {
 		var self = this;
         var tableinfo = self.alltables[i];
 		tableinfo.options = Function('"use strict";return (' + tableinfo.options + ')')();
-    
-	
-		
 		
 		if (tableinfo.script) {
-					tableinfo.script = new Function('"use strict"; return ' + tableinfo.script + ';')();
+			tableinfo.script = new Function('"use strict"; return ' + tableinfo.script + ';')();
 		} 
 		else {
 			tableinfo.script = function (data, datatable, datatableoptions) {
