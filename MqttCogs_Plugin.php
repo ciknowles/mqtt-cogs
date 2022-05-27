@@ -380,7 +380,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
         if ($column_name == 'type') {
             $tax_id = get_post_meta( $post_id, 'meta-type', true );
             $term = get_term_by( 'term_taxonomy_id', $tax_id, 'thingtypes');
-            echo  $term->name;
+            
+            if (isset($term)) {
+                echo  $term->name;
+            }
         }
     }
 
@@ -1499,8 +1502,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			if (empty($group)) {
 				$sql = $wpdb->prepare("SELECT `topic` as topic,`utc` as dtm,$agg from $table_name
 									WHERE topic LIKE %s
-									AND ((utc>=%s OR %s='') 
-									AND (utc<=%s OR %s='')) 
+									AND ((%s='' OR utc>=%s ) 
+									AND (%s='' OR utc<=%s )) 
 									AND $payloadfield IS NOT NULL
 									order by utc $order limit %d",
 										$splitTopic["topic_core"],
@@ -1514,8 +1517,8 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 			else { 	    	
 				$sql = $wpdb->prepare("SELECT `topic` as topic, DATE_ADD('1970-01-01 00:00:00', INTERVAL TIMESTAMPDIFF($group, '1970-01-01 00:00:00', `utc`) $group) as dtm, $agg from $table_name
 									WHERE topic LIKE %s 
-									AND ((utc>=%s OR %s='') 
-									AND (utc<=%s OR %s='')) 
+									AND ((%s='' OR utc>=%s ) 
+									AND (%s='' OR utc<=%s )) 
 									AND $payloadfield IS NOT NULL
 									GROUP BY dtm
 									order by dtm $order limit %d",
@@ -1946,10 +1949,10 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		}	
 		
 		//replacewordpress user (To remove I think)
-		$topicorslug = $this->replaceWordpressUser($topicorslug);
+		//$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
-		$found = /*(strlen($topicorslug)>0) &&*/ strpos($topicorslug, '$', 1); //must be at least one character before it
+		$found = (strlen($topicorslug)>0) && strpos($topicorslug, '$', 1); //must be at least one character before it
 	    
 		
 		if ($found === FALSE) {
