@@ -381,7 +381,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
             $tax_id = get_post_meta( $post_id, 'meta-type', true );
             $term = get_term_by( 'term_taxonomy_id', $tax_id, 'thingtypes');
             
-            if (isset($term)) {
+            if ($term) {
                 echo  $term->name;
             }
         }
@@ -1952,7 +1952,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		//$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
-		$found = /*(strlen($topicorslug)>0) &&*/ strpos($topicorslug, '$', 1); //must be at least one character before it
+		$found = $topicorslug &&  /*(strlen($topicorslug)>0) &&*/ strpos($topicorslug, '$', 1); //must be at least one character before it
 	    
 		
 		if ($found === FALSE) {
