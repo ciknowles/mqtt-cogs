@@ -1952,7 +1952,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		//$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
-		$found = (strlen($topicorslug)>0) && strpos($topicorslug, '$', 1); //must be at least one character before it
+		$found = /*(strlen($topicorslug)>0) &&*/ strpos($topicorslug, '$', 1); //must be at least one character before it
 	    
 		
 		if ($found === FALSE) {
