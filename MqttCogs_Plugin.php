@@ -1588,6 +1588,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    wp_enqueue_script('datatables');
 		wp_enqueue_script('datatablesdrawer');	
 
+		  //set google maps key
+		  wp_localize_script( 'loadgoogle', 'params',['mapsApiKey'=>wp_unslash($this->getOption('MQTT_GVisMapsApiKey', ''))]);
+
 		
 		
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
@@ -1658,7 +1661,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	    wp_enqueue_script('leaflet');
 		wp_enqueue_script('leafletdrawer');	
 
-        
+          //set google maps key
+	  wp_localize_script( 'loadgoogle', 'params',['mapsApiKey'=>wp_unslash($this->getOption('MQTT_GVisMapsApiKey', ''))]);
+
 		$atts = array_change_key_case((array)$atts, CASE_LOWER);
 		$id = uniqid();
 		
@@ -1729,6 +1734,11 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 	  wp_enqueue_script('jquery');
 	  wp_enqueue_script('google_loadecharts');
 	  wp_enqueue_script('loadgoogle');
+
+	    //set google maps key
+		wp_localize_script( 'loadgoogle', 'params',['mapsApiKey'=>wp_unslash($this->getOption('MQTT_GVisMapsApiKey', ''))]);
+
+	  
 			
  	  $atts = array_change_key_case((array)$atts, CASE_LOWER);
   	
@@ -1896,7 +1906,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		//$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
-<<<<<<< HEAD
 		
 		if (strlen($topicorslug)<1) {
 		    $found = FALSE;
@@ -1904,9 +1913,6 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		else {
 		    $found =   strpos($topicorslug, '$', 1); //must be at least one character before it
 		}
-=======
-		$found =   /*(strlen($topicorslug)>0) &&*/ strpos($topicorslug, '$', 1); //must be at least one character before it
->>>>>>> e3e1215fd0eaed3d18c2198ac35baf5e84c87e6e
 	    
 		
 		if ($found === FALSE) {
