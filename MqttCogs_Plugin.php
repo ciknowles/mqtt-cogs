@@ -1896,6 +1896,7 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		//$topicorslug = $this->replaceWordpressUser($topicorslug);
 		$ret["topic"] = $topicorslug;
 		
+<<<<<<< HEAD
 		
 		if (strlen($topicorslug)<1) {
 		    $found = FALSE;
@@ -1903,6 +1904,9 @@ class MqttCogs_Plugin extends MqttCogs_LifeCycle {
 		else {
 		    $found =   strpos($topicorslug, '$', 1); //must be at least one character before it
 		}
+=======
+		$found =   /*(strlen($topicorslug)>0) &&*/ strpos($topicorslug, '$', 1); //must be at least one character before it
+>>>>>>> e3e1215fd0eaed3d18c2198ac35baf5e84c87e6e
 	    
 		
 		if ($found === FALSE) {
